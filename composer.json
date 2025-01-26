@@ -1,0 +1,19 @@
+{
+  "name": "codehubcare/laravel-deployer",
+  "description": "Deploy laravel based application to a shared web hosting",
+  "type": "library",
+  "autoload": {
+    "psr-r": {
+      "Codehubcare\\LaravelDeployer\\": "src/"
+    }
+  },
+  "authors": [
+    {
+      "name": "Shamshad Zaheer",
+      "email": "shamshadtech101@gmail.com"
+    }
+  ],
+  "require-dev": {
+    "orchestra/testbench": "^9.9"
+  }
+}
