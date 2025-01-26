@@ -169,6 +169,8 @@ class ComposerStaticInit3d205f1f23d68bc56e8adb8936d78e8c
             'Doctrine\\Common\\Lexer\\' => 22,
             'Dflydev\\DotAccessData\\' => 22,
             'DeepCopy\\' => 9,
+            'Database\\Seeders\\' => 17,
+            'Database\\Factories\\' => 19,
         ),
         'C' => 
         array (
@@ -180,6 +182,10 @@ class ComposerStaticInit3d205f1f23d68bc56e8adb8936d78e8c
         'B' => 
         array (
             'Brick\\Math\\' => 11,
+        ),
+        'A' => 
+        array (
+            'App\\' => 4,
         ),
     );
 
@@ -512,6 +518,14 @@ class ComposerStaticInit3d205f1f23d68bc56e8adb8936d78e8c
         array (
             0 => __DIR__ . '/..' . '/myclabs/deep-copy/src/DeepCopy',
         ),
+        'Database\\Seeders\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/laravel/pint/database/seeders',
+        ),
+        'Database\\Factories\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/laravel/pint/database/factories',
+        ),
         'Cron\\' => 
         array (
             0 => __DIR__ . '/..' . '/dragonmantank/cron-expression/src/Cron',
@@ -531,6 +545,10 @@ class ComposerStaticInit3d205f1f23d68bc56e8adb8936d78e8c
         'Brick\\Math\\' => 
         array (
             0 => __DIR__ . '/..' . '/brick/math/src',
+        ),
+        'App\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/laravel/pint/app',
         ),
     );
 
