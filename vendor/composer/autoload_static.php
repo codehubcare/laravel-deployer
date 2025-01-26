@@ -50,6 +50,9 @@ class ComposerStaticInit3d205f1f23d68bc56e8adb8936d78e8c
         ),
         'W' => 
         array (
+            'Workbench\\Database\\Seeders\\' => 27,
+            'Workbench\\Database\\Factories\\' => 29,
+            'Workbench\\App\\' => 14,
             'Whoops\\' => 7,
             'Webmozart\\Assert\\' => 17,
         ),
@@ -184,6 +187,18 @@ class ComposerStaticInit3d205f1f23d68bc56e8adb8936d78e8c
         'voku\\' => 
         array (
             0 => __DIR__ . '/..' . '/voku/portable-ascii/src/voku',
+        ),
+        'Workbench\\Database\\Seeders\\' => 
+        array (
+            0 => __DIR__ . '/../..' . '/workbench/database/seeders',
+        ),
+        'Workbench\\Database\\Factories\\' => 
+        array (
+            0 => __DIR__ . '/../..' . '/workbench/database/factories',
+        ),
+        'Workbench\\App\\' => 
+        array (
+            0 => __DIR__ . '/../..' . '/workbench/app',
         ),
         'Whoops\\' => 
         array (
@@ -339,8 +354,8 @@ class ComposerStaticInit3d205f1f23d68bc56e8adb8936d78e8c
         ),
         'Psr\\Http\\Message\\' => 
         array (
-            0 => __DIR__ . '/..' . '/psr/http-message/src',
-            1 => __DIR__ . '/..' . '/psr/http-factory/src',
+            0 => __DIR__ . '/..' . '/psr/http-factory/src',
+            1 => __DIR__ . '/..' . '/psr/http-message/src',
         ),
         'Psr\\Http\\Client\\' => 
         array (
@@ -396,8 +411,8 @@ class ComposerStaticInit3d205f1f23d68bc56e8adb8936d78e8c
         ),
         'League\\Uri\\' => 
         array (
-            0 => __DIR__ . '/..' . '/league/uri-interfaces',
-            1 => __DIR__ . '/..' . '/league/uri',
+            0 => __DIR__ . '/..' . '/league/uri',
+            1 => __DIR__ . '/..' . '/league/uri-interfaces',
         ),
         'League\\MimeTypeDetection\\' => 
         array (
