@@ -37,5 +37,9 @@
       "@build",
       "@php vendor/bin/testbench serve --ansi"
     ]
+  },
+  "require": {
+    "guzzlehttp/guzzle": "^7.0",
+    "phpseclib/phpseclib": "^3.0"
   }
 }

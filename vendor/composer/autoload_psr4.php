@@ -7,6 +7,7 @@ $baseDir = dirname($vendorDir);
 
 return array(
     'voku\\' => array($vendorDir . '/voku/portable-ascii/src/voku'),
+    'phpseclib3\\' => array($vendorDir . '/phpseclib/phpseclib/phpseclib'),
     'Workbench\\Database\\Seeders\\' => array($baseDir . '/workbench/database/seeders'),
     'Workbench\\Database\\Factories\\' => array($baseDir . '/workbench/database/factories'),
     'Workbench\\App\\' => array($baseDir . '/workbench/app'),
@@ -55,6 +56,7 @@ return array(
     'Psr\\Clock\\' => array($vendorDir . '/psr/clock/src'),
     'PhpParser\\' => array($vendorDir . '/nikic/php-parser/lib/PhpParser'),
     'PhpOption\\' => array($vendorDir . '/phpoption/phpoption/src/PhpOption'),
+    'ParagonIE\\ConstantTime\\' => array($vendorDir . '/paragonie/constant_time_encoding/src'),
     'Orchestra\\Workbench\\' => array($vendorDir . '/orchestra/workbench/src'),
     'Orchestra\\Testbench\\' => array($vendorDir . '/orchestra/testbench-core/src'),
     'Orchestra\\Canvas\\Core\\' => array($vendorDir . '/orchestra/canvas-core/src'),

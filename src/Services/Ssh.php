@@ -2,87 +2,166 @@
 
 namespace Codehubcare\LaravelDeployer\Services;
 
+use phpseclib3\Net\SFTP;
+use phpseclib3\Net\SSH2;
+
 class Ssh
 {
-    public function __construct() {}
+    private $ssh;
+    private $sftp;
+    private $host;
+    private $username;
+    private $password;
+    private $port;
+
+    public function __construct($host = null, $username = null, $password = null, $port = 22)
+    {
+        $this->host = $host;
+        $this->username = $username;
+        $this->password = $password;
+        $this->port = $port;
+    }
 
     public function connect()
     {
-        return 'Connected to SSH';
+        try {
+            $this->ssh = new SSH2($this->host, $this->port);
+            $this->sftp = new SFTP($this->host, $this->port);
+
+            if (
+                !$this->ssh->login($this->username, $this->password) ||
+                !$this->sftp->login($this->username, $this->password)
+            ) {
+                throw new \Exception('Login failed');
+            }
+
+            return true;
+        } catch (\Exception $e) {
+            throw new \Exception('Connection failed: ' . $e->getMessage());
+        }
     }
 
     public function disconnect()
     {
-        return 'Disconnected from SSH';
+        $this->ssh = null;
+        $this->sftp = null;
+        return true;
     }
 
     public function execute($command)
     {
-        return 'Executing command: ' . $command;
+        if (!$this->ssh) {
+            throw new \Exception('Not connected');
+        }
+        return $this->ssh->exec($command);
     }
 
     public function upload($file, $destination)
     {
-        return 'Uploading file: ' . $file . ' to destination: ' . $destination;
+        if (!$this->sftp) {
+            throw new \Exception('Not connected');
+        }
+        return $this->sftp->put($destination, $file, SFTP::SOURCE_LOCAL_FILE);
     }
 
     public function download($file, $destination)
     {
-        return 'Downloading file: ' . $file . ' to destination: ' . $destination;
+        if (!$this->sftp) {
+            throw new \Exception('Not connected');
+        }
+        return $this->sftp->get($file, $destination);
     }
 
     public function delete($file)
     {
-        return 'Deleting file: ' . $file;
+        if (!$this->sftp) {
+            throw new \Exception('Not connected');
+        }
+        return $this->sftp->delete($file);
     }
 
-    public function list()
+    public function list($directory = '.')
     {
-        return 'Listing files';
+        if (!$this->sftp) {
+            throw new \Exception('Not connected');
+        }
+        return $this->sftp->nlist($directory);
     }
 
     public function getFile($file)
     {
-        return 'Getting file: ' . $file;
+        if (!$this->sftp) {
+            throw new \Exception('Not connected');
+        }
+        return $this->sftp->stat($file);
     }
 
     public function getDirectory($directory)
     {
-        return 'Getting directory: ' . $directory;
+        if (!$this->sftp) {
+            throw new \Exception('Not connected');
+        }
+        return $this->sftp->stat($directory);
     }
 
     public function getFileContent($file)
     {
-        return 'Getting file content: ' . $file;
+        if (!$this->sftp) {
+            throw new \Exception('Not connected');
+        }
+        return $this->sftp->get($file);
     }
 
     public function getDirectoryContent($directory)
     {
-        return 'Getting directory content: ' . $directory;
+        if (!$this->sftp) {
+            throw new \Exception('Not connected');
+        }
+        return $this->sftp->rawlist($directory);
     }
 
     public function getFileSize($file)
     {
-        return 'Getting file size: ' . $file;
+        if (!$this->sftp) {
+            throw new \Exception('Not connected');
+        }
+        $stat = $this->sftp->stat($file);
+        return $stat['size'] ?? null;
     }
 
     public function getFilePermissions($file)
     {
-        return 'Getting file permissions: ' . $file;
+        if (!$this->sftp) {
+            throw new \Exception('Not connected');
+        }
+        $stat = $this->sftp->stat($file);
+        return $stat['permissions'] ?? null;
     }
 
     public function getFileOwner($file)
     {
-        return 'Getting file owner: ' . $file;
+        if (!$this->sftp) {
+            throw new \Exception('Not connected');
+        }
+        $stat = $this->sftp->stat($file);
+        return $stat['uid'] ?? null;
     }
 
     public function getFileGroup($file)
     {
-        return 'Getting file group: ' . $file;
+        if (!$this->sftp) {
+            throw new \Exception('Not connected');
+        }
+        $stat = $this->sftp->stat($file);
+        return $stat['gid'] ?? null;
     }
 
     public function getFileLastModified($file)
     {
-        return 'Getting file last modified: ' . $file;
+        if (!$this->sftp) {
+            throw new \Exception('Not connected');
+        }
+        $stat = $this->sftp->stat($file);
+        return $stat['mtime'] ?? null;
     }
 }
