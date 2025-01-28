@@ -3,7 +3,7 @@
   "description": "Deploy laravel based application to a shared web hosting",
   "type": "library",
   "autoload": {
-    "psr-r": {
+    "psr-4": {
       "Codehubcare\\LaravelDeployer\\": "src/"
     }
   },
@@ -41,5 +41,13 @@
   "require": {
     "guzzlehttp/guzzle": "^7.0",
     "phpseclib/phpseclib": "^3.0"
+  },
+  "minimum-stability": "dev",
+  "extra": {
+    "laravel": {
+      "providers": [
+        "Codehubcare\\LaravelDeployer\\LaravelDeployerServiceProvider"
+      ]
+    }
   }
 }

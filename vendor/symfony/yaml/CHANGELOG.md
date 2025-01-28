@@ -1,10 +1,16 @@
 CHANGELOG
 =========
 
+7.3
+---
+
+ * Add compact nested mapping support by using the `Yaml::DUMP_COMPACT_NESTED_MAPPING` flag
+
 7.2
 ---
 
  * Deprecate parsing duplicate mapping keys whose value is `null`
+ * Add support for dumping `null` as an empty value by using the `Yaml::DUMP_NULL_AS_EMPTY` flag
 
 7.1
 ---

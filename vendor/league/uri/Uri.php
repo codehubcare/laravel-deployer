@@ -13,44 +13,73 @@ declare(strict_types=1);
 
 namespace League\Uri;
 
+use Closure;
 use Deprecated;
+use Dom\HTMLDocument;
+use DOMDocument;
+use DOMException;
 use finfo;
+use League\Uri\Contracts\Conditionable;
 use League\Uri\Contracts\UriComponentInterface;
 use League\Uri\Contracts\UriException;
+use League\Uri\Contracts\UriInspector;
 use League\Uri\Contracts\UriInterface;
+use League\Uri\Contracts\UriRenderer;
 use League\Uri\Exceptions\ConversionFailed;
 use League\Uri\Exceptions\MissingFeature;
 use League\Uri\Exceptions\SyntaxError;
-use League\Uri\Idna\Converter as IdnConverter;
+use League\Uri\Idna\Converter as IdnaConverter;
+use League\Uri\IPv6\Converter as IPv6Converter;
 use League\Uri\UriTemplate\TemplateCanNotBeExpanded;
 use Psr\Http\Message\UriInterface as Psr7UriInterface;
+use RuntimeException;
 use SensitiveParameter;
+use SplFileInfo;
+use SplFileObject;
 use Stringable;
+use Throwable;
+use TypeError;
 
 use function array_filter;
 use function array_map;
+use function array_pop;
 use function base64_decode;
 use function base64_encode;
+use function class_exists;
 use function count;
+use function end;
 use function explode;
+use function feof;
 use function file_get_contents;
 use function filter_var;
+use function fread;
 use function implode;
 use function in_array;
 use function inet_pton;
+use function is_array;
+use function is_bool;
+use function is_string;
 use function ltrim;
 use function preg_match;
 use function preg_replace_callback;
+use function rawurldecode;
 use function rawurlencode;
+use function restore_error_handler;
+use function set_error_handler;
+use function sprintf;
 use function str_contains;
+use function str_repeat;
 use function str_replace;
+use function str_starts_with;
 use function strlen;
 use function strpos;
 use function strspn;
 use function strtolower;
 use function substr;
+use function trim;
 
 use const FILEINFO_MIME;
+use const FILEINFO_MIME_TYPE;
 use const FILTER_FLAG_IPV4;
 use const FILTER_FLAG_IPV6;
 use const FILTER_NULL_ON_FAILURE;
@@ -61,7 +90,7 @@ use const FILTER_VALIDATE_IP;
  * @phpstan-import-type ComponentMap from UriString
  * @phpstan-import-type InputComponentMap from UriString
  */
-final class Uri implements UriInterface
+final class Uri implements Conditionable, UriInterface, UriRenderer, UriInspector
 {
     /**
      * RFC3986 invalid characters.
@@ -198,6 +227,11 @@ final class Uri implements UriInterface
      */
     private const ASCII = "\x20\x65\x69\x61\x73\x6E\x74\x72\x6F\x6C\x75\x64\x5D\x5B\x63\x6D\x70\x27\x0A\x67\x7C\x68\x76\x2E\x66\x62\x2C\x3A\x3D\x2D\x71\x31\x30\x43\x32\x2A\x79\x78\x29\x28\x4C\x39\x41\x53\x2F\x50\x22\x45\x6A\x4D\x49\x6B\x33\x3E\x35\x54\x3C\x44\x34\x7D\x42\x7B\x38\x46\x77\x52\x36\x37\x55\x47\x4E\x3B\x4A\x7A\x56\x23\x48\x4F\x57\x5F\x26\x21\x4B\x3F\x58\x51\x25\x59\x5C\x09\x5A\x2B\x7E\x5E\x24\x40\x60\x7F\x00\x01\x02\x03\x04\x05\x06\x07\x08\x0B\x0C\x0D\x0E\x0F\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F";
 
+    /** @var array<string,int> */
+    private const WHATWG_SPECIAL_SCHEMES = ['ftp' => 1, 'http' => 1, 'https' => 1, 'ws' => 1, 'wss' => 1];
+
+    private const ABOUT_BLANK = 'about:blank';
+
     private readonly ?string $scheme;
     private readonly ?string $user;
     private readonly ?string $pass;
@@ -209,6 +243,7 @@ final class Uri implements UriInterface
     private readonly ?string $query;
     private readonly ?string $fragment;
     private readonly string $uri;
+    private readonly ?string $origin;
 
     private function __construct(
         ?string $scheme,
@@ -231,8 +266,8 @@ final class Uri implements UriInterface
         $this->userInfo = $this->formatUserInfo($this->user, $this->pass);
         $this->authority = UriString::buildAuthority($this->toComponents());
         $this->uri = UriString::buildUri($this->scheme, $this->authority, $this->path, $this->query, $this->fragment);
-
         $this->assertValidState();
+        $this->origin = $this->setOrigin();
     }
 
     /**
@@ -319,7 +354,7 @@ final class Uri implements UriInterface
         return match (1) {
             preg_match(self::REGEXP_HOST_REGNAME, $formattedHost) => $formattedHost,
             preg_match(self::REGEXP_HOST_GEN_DELIMS, $formattedHost) => throw new SyntaxError('The host `'.$host.'` is invalid : a registered name cannot contain URI delimiters or spaces.'),
-            default => IdnConverter::toAsciiOrFail($host),
+            default => IdnaConverter::toAsciiOrFail($host),
         };
     }
 
@@ -379,14 +414,32 @@ final class Uri implements UriInterface
     }
 
     /**
+     * Create a new instance from a string or a stringable structure or returns null on failure.
+     */
+    public static function tryNew(Stringable|string|null $uri = ''): ?self
+    {
+        if (null === $uri) {
+            return null;
+        }
+
+        try {
+            return self::new($uri);
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    /**
      * Create a new instance from a string.
      */
     public static function new(Stringable|string $uri = ''): self
     {
-        $components = match (true) {
-            $uri instanceof UriInterface => $uri->toComponents(),
-            default => UriString::parse($uri),
-        };
+        $uri = (string) $uri;
+        if ('' === $uri) {
+            return new self(null, null, null, null, null, '', null, null);
+        }
+
+        $components = UriString::parse($uri);
 
         return new self(
             $components['scheme'],
@@ -401,6 +454,22 @@ final class Uri implements UriInterface
     }
 
     /**
+     * Returns a new instance from a URI and a Base URI.or null on failure.
+     *
+     * The returned URI must be absolute.
+     *
+     * @see https://wiki.php.net/rfc/url_parsing_api
+     */
+    public static function parse(Stringable|string $uri, Stringable|string|null $baseUri = null): ?self
+    {
+        try {
+            return self::fromBaseUri($uri, $baseUri);
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    /**
      * Creates a new instance from a URI and a Base URI.
      *
      * The returned URI must be absolute.
@@ -409,16 +478,7 @@ final class Uri implements UriInterface
         Stringable|string $uri,
         Stringable|string|null $baseUri = null
     ): self {
-        $uri = self::new($uri);
-        $baseUri = BaseUri::from($baseUri ?? $uri);
-
-        /** @var self $uri */
-        $uri = match (true) {
-            $baseUri->isAbsolute() => $baseUri->resolve($uri)->getUri(),
-            default => throw new SyntaxError('the URI `'.$baseUri.'` must be absolute.'),
-        };
-
-        return $uri;
+        return self::new(UriString::resolve($uri, $baseUri));
     }
 
     /**
@@ -430,7 +490,7 @@ final class Uri implements UriInterface
     public static function fromTemplate(UriTemplate|Stringable|string $template, iterable $variables = []): self
     {
         return match (true) {
-            $template instanceof UriTemplate => self::fromComponents($template->expand($variables)->toComponents()),
+            $template instanceof UriTemplate => self::new($template->expand($variables)),
             $template instanceof UriTemplate\Template => self::new($template->expand($variables)),
             default => self::new(UriTemplate\Template::new($template)->expand($variables)),
         };
@@ -468,32 +528,70 @@ final class Uri implements UriInterface
     /**
      * Create a new instance from a data file path.
      *
-     * @param resource|null $context
+     * @param SplFileInfo|SplFileObject|resource|Stringable|string $path
+     * @param ?resource $context
      *
      * @throws MissingFeature If ext/fileinfo is not installed
      * @throws SyntaxError If the file does not exist or is not readable
      */
-    public static function fromFileContents(Stringable|string $path, $context = null): self
+    public static function fromFileContents(mixed $path, $context = null): self
     {
         FeatureDetection::supportsFileDetection();
+        $finfo = new finfo(FILEINFO_MIME_TYPE);
+        $bufferSize = 8192;
 
-        $path = (string) $path;
-        $fileArguments = [$path, false];
-        $mimeArguments = [$path, FILEINFO_MIME];
-        if (null !== $context) {
-            $fileArguments[] = $context;
-            $mimeArguments[] = $context;
-        }
+        /** @var Closure(SplFileobject): array{0:string, 1:string} $fromFileObject */
+        $fromFileObject = function (SplFileObject $path) use ($finfo, $bufferSize): array {
+            $raw = $path->fread($bufferSize);
+            if (false === $raw) {
+                throw new SyntaxError('The file `'.$path.'` does not exist or is not readable.');
+            }
+            $mimetype = (string) $finfo->buffer($raw);
+            while (!$path->eof()) {
+                $raw .= $path->fread($bufferSize);
+            }
 
-        set_error_handler(fn (int $errno, string $errstr, string $errfile, int $errline) => true);
-        $raw = file_get_contents(...$fileArguments);
-        restore_error_handler();
+            return [$mimetype, $raw];
+        };
 
-        if (false === $raw) {
-            throw new SyntaxError('The file `'.$path.'` does not exist or is not readable.');
-        }
+        /** @var Closure(resource): array{0:string, 1:string} $fromResource */
+        $fromResource = function ($stream) use ($finfo, $path, $bufferSize): array {
+            set_error_handler(fn (int $errno, string $errstr, string $errfile, int $errline) => true);
+            $raw = fread($stream, $bufferSize);
+            if (false === $raw) {
+                throw new SyntaxError('The file `'.$path.'` does not exist or is not readable.');
+            }
+            $mimetype = (string) $finfo->buffer($raw);
+            while (!feof($stream)) {
+                $raw .= fread($stream, $bufferSize);
+            }
+            restore_error_handler();
 
-        $mimetype = (string) (new finfo(FILEINFO_MIME))->file(...$mimeArguments);
+            return [$mimetype, $raw];
+        };
+
+        /** @var Closure(Stringable|string, resource|null): array{0:string, 1:string} $fromPath */
+        $fromPath = function (Stringable|string $path, $context) use ($finfo): array {
+            $path = (string) $path;
+            set_error_handler(fn (int $errno, string $errstr, string $errfile, int $errline) => true);
+            $raw = file_get_contents(filename: $path, context: $context);
+            restore_error_handler();
+            if (false === $raw) {
+                throw new SyntaxError('The file `'.$path.'` does not exist or is not readable.');
+            }
+            $mimetype = (string) $finfo->file(filename: $path, flags: FILEINFO_MIME, context: $context);
+
+            return [$mimetype, $raw];
+        };
+
+        [$mimetype, $raw] = match (true) {
+            $path instanceof SplFileObject => $fromFileObject($path),
+            $path instanceof SplFileInfo => $fromFileObject($path->openFile(mode: 'rb', context: $context)),
+            is_resource($path) => $fromResource($path),
+            $path instanceof Stringable,
+            is_string($path) => $fromPath($path, $context),
+            default => throw new TypeError('The path `'.$path.'` is not a valid resource.'),
+        };
 
         return Uri::fromComponents([
             'scheme' => 'data',
@@ -560,8 +658,8 @@ final class Uri implements UriInterface
      */
     public static function fromWindowsPath(Stringable|string $path): self
     {
-        $path = (string) $path;
         $root = '';
+        $path = (string) $path;
         if (1 === preg_match(self::REGEXP_WINDOW_PATH, $path, $matches)) {
             $root = substr($matches['root'], 0, -1).':';
             $path = substr($path, strlen($root));
@@ -612,6 +710,82 @@ final class Uri implements UriInterface
         [$components['path'], $components['query']] = self::fetchRequestUri($server);
 
         return Uri::fromComponents($components);
+    }
+
+    public static function fromMarkdownAnchor(Stringable|string $markdown, Stringable|string|null $baseUri = null): self
+    {
+        static $regexp = '/
+             \[(?:[^]]*)]      #title attribute
+             \((?<uri>[^)]*)\) #href attribute
+         /x';
+        $markdown = trim((string) $markdown);
+        if (1 !== preg_match($regexp, $markdown, $matches)) {
+            throw new SyntaxError('The markdown string `'.$markdown.'` is not valid anchor markdown tag.');
+        }
+
+        if (null !== $baseUri) {
+            $baseUri = (string) $baseUri;
+        }
+
+        return match ($baseUri) {
+            self::ABOUT_BLANK, null => self::new($matches['uri']),
+            default => self::fromBaseUri($matches['uri'], $baseUri),
+        };
+    }
+
+    /**
+     * If the html content contains more than one anchor element, only the first one will be parsed.
+     *
+     * @throws DOMException
+     */
+    public static function fromHtmlAnchor(Stringable|string $html, Stringable|string|null $baseUri = null): self
+    {
+        $dom = self::loadDom($html);
+        $element = $dom->getElementsByTagName('a')->item(0);
+        if (null === $element) {
+            throw new DOMException('No anchor element was found in the content.');
+        }
+
+        $uri = $element->getAttribute('href');
+        if (null !== $baseUri) {
+            $baseUri = (string) $baseUri;
+        }
+
+        return match (true) {
+            !in_array($baseUri, [null, self::ABOUT_BLANK], true) => self::fromBaseUri($uri, $baseUri),
+            !in_array($dom->documentURI, [null, self::ABOUT_BLANK], true) => self::fromBaseUri($uri, $dom->documentURI),
+            default => self::new($uri),
+        };
+    }
+
+    /**
+     * @throws DOMException
+     * @throws Throwable
+     */
+    private static function loadDom(Stringable|string $html): DOMDocument|HTMLDocument
+    {
+        FeatureDetection::supportsDom();
+
+        $html = (string) $html;
+        if (class_exists(HTMLDocument::class)) {
+            try {
+                set_error_handler(fn (int $errno, string $errstr, string $errfile, int $errline) => true);
+
+                return HTMLDocument::createFromString($html);
+            } finally {
+                restore_error_handler();
+            }
+        }
+
+        set_error_handler(fn (int $errno, string $errstr, string $errfile, int $errline) => true);
+        $dom = new DOMDocument();
+        $result = $dom->loadHTML($html);
+        restore_error_handler();
+        if (false === $result) {
+            throw new DOMException('The content could not be parsed as a valid HTML content.');
+        }
+
+        return $dom;
     }
 
     /**
@@ -855,6 +1029,50 @@ final class Uri implements UriInterface
     }
 
     /**
+     * Sets the URI origin.
+     *
+     * The origin read-only property of the URL interface returns a string containing the Unicode serialization
+     * of the origin of the represented URL.
+     */
+    private function setOrigin(): ?string
+    {
+        try {
+            if ('blob' !== $this->scheme) {
+                if (!isset(static::WHATWG_SPECIAL_SCHEMES[$this->scheme])) {
+                    return null;
+                }
+
+                return $this
+                    ->withFragment(null)
+                    ->withQuery(null)
+                    ->withPath('')
+                    ->withUserInfo(null)
+                    ->withHost($this->normalizeHost())
+                    ->toString();
+            }
+
+            $components = UriString::parse($this->path);
+            $scheme = strtolower($components['scheme'] ?? '');
+            if (!isset(static::WHATWG_SPECIAL_SCHEMES[$scheme])) {
+                return null;
+            }
+
+            return self::fromComponents($components)->origin;
+        } catch (UriException) {
+            return null;
+        }
+    }
+
+    private function normalizeHost(): ?string
+    {
+        if (null === $this->host) {
+            return null;
+        }
+
+        return IdnaConverter::toUnicode((string)IPv6Converter::compress($this->host))->domain();
+    }
+
+    /**
      * URI validation for URI schemes which allows only scheme and path components.
      */
     private function isUriWithSchemeAndPathOnly(): bool
@@ -903,25 +1121,213 @@ final class Uri implements UriInterface
         return $this->isNonEmptyHostUri() && null === $this->fragment && null === $this->query;
     }
 
+    public function __toString(): string
+    {
+        return $this->toString();
+    }
+
+    public function jsonSerialize(): string
+    {
+        return $this->toString();
+    }
+
     public function toString(): string
     {
         return $this->uri;
     }
 
     /**
-     * {@inheritDoc}
+     * * @see https://wiki.php.net/rfc/url_parsing_api
      */
-    public function __toString(): string
+    public function toNormalizedString(): string
     {
-        return $this->toString();
+        return $this->normalize()->toString();
+    }
+
+    public function toDisplayString(): string
+    {
+        /** @var ComponentMap $components */
+        $components = array_map(
+            fn (?string $value): ?string => (null === $value || '' === $value) ? $value : rawurldecode($value),
+            $this->normalize()->toComponents()
+        );
+
+        if (null !== $components['host']) {
+            $components['host'] = IdnaConverter::toUnicode($components['host'])->domain();
+        }
+
+        if ('/' === $components['path'] && null !== $this->authority) {
+            $components['path'] = '';
+        }
+
+        return UriString::build($components);
     }
 
     /**
-     * {@inheritDoc}
+     * Returns the markdown string representation of the anchor tag with the current instance as its href attribute.
      */
-    public function jsonSerialize(): string
+    public function toMarkdownAnchor(?string $linkTextTemplate = null): string
     {
-        return $this->toString();
+        return '['.strtr($linkTextTemplate ?? '{uri}', ['{uri}' => $this->toDisplayString()]).']('.$this->toString().')';
+    }
+
+    /**
+     * Returns the HTML string representation of the anchor tag with the current instance as its href attribute.
+     *
+     * @param iterable<string, string|null|array<string>> $attributes an ordered map of key value. you must quote the value if needed
+     *
+     * @throws DOMException
+     */
+    public function toHtmlAnchor(?string $linkTextTemplate = null, iterable $attributes = []): string
+    {
+        FeatureDetection::supportsDom();
+
+        $doc = class_exists(HTMLDocument::class) ? HTMLDocument::createEmpty() : new DOMDocument(encoding:'utf-8');
+        $element = $doc->createElement('a');
+        $element->setAttribute('href', $this->toString());
+        $element->appendChild($doc->createTextNode(strtr($linkTextTemplate ?? '{uri}', ['{uri}' => $this->toDisplayString()])));
+
+        foreach ($attributes as $name => $value) {
+            if ('href' === strtolower($name) || null === $value) {
+                continue;
+            }
+
+            if (is_array($value)) {
+                $value = implode(' ', $value);
+            }
+
+            if (!is_string($value)) {
+                throw new TypeError('The attribute `'.$name.'` contains an invalid value.');
+            }
+
+            $value = trim($value);
+            if ('' === $value) {
+                continue;
+            }
+
+            $element->setAttribute($name, $value);
+        }
+
+        $html = $doc->saveHTML($element);
+        if (false === $html) {
+            throw new DOMException('The HTML generation failed.');
+        }
+
+        return $html;
+    }
+
+    /**
+     * Returns the Unix filesystem path.
+     *
+     * The method will return null if a scheme is present and is not the `file` scheme
+     */
+    public function toUnixPath(): ?string
+    {
+        return match ($this->scheme) {
+            'file', null => rawurldecode($this->path),
+            default => null,
+        };
+    }
+
+    /**
+     * Returns the Windows filesystem path.
+     *
+     * The method will return null if a scheme is present and is not the `file` scheme
+     */
+    public function toWindowsPath(): ?string
+    {
+        static $regexpWindowsPath = ',^(?<root>[a-zA-Z]:),';
+
+        if (!in_array($this->scheme, ['file', null], true)) {
+            return null;
+        }
+
+        $originalPath = $this->path;
+        $path = $originalPath;
+        if ('/' === ($path[0] ?? '')) {
+            $path = substr($path, 1);
+        }
+
+        if (1 === preg_match($regexpWindowsPath, $path, $matches)) {
+            $root = $matches['root'];
+            $path = substr($path, strlen($root));
+
+            return $root.str_replace('/', '\\', rawurldecode($path));
+        }
+
+        $host = $this->host;
+
+        return match (null) {
+            $host => str_replace('/', '\\', rawurldecode($originalPath)),
+            default => '\\\\'.$host.'\\'.str_replace('/', '\\', rawurldecode($path)),
+        };
+    }
+
+    /**
+     * Returns a string representation of a File URI according to RFC8089.
+     *
+     * The method will return null if the URI scheme is not the `file` scheme
+     *
+     * @see https://datatracker.ietf.org/doc/html/rfc8089
+     */
+    public function toRfc8089(): ?string
+    {
+        $path = $this->path;
+
+        return match (true) {
+            'file' !== $this->scheme => null,
+            in_array($this->authority, ['', null, 'localhost'], true) => 'file:'.match (true) {
+                '' === $path,
+                '/' === $path[0] => $path,
+                default => '/'.$path,
+            },
+            default => $this->toString(),
+        };
+    }
+
+    public function toFileContents(mixed $destination, $context = null): ?int
+    {
+        if ('data' !== $this->scheme) {
+            return null;
+        }
+
+        [$mediaType, $document] = explode(',', $this->path, 2) + [0 => '', 1 => null];
+        if (null === $document) {
+            throw new RuntimeException('Unable to extract the document part from the URI path.');
+        }
+
+        $data = match (true) {
+            str_ends_with((string) $mediaType, ';base64') => (string) base64_decode($document, true),
+            default => rawurldecode($document),
+        };
+
+        $res = match (true) {
+            $destination instanceof SplFileObject => $destination->fwrite($data),
+            $destination instanceof SplFileInfo => $destination->openFile(mode:'wb', context: $context)->fwrite($data),
+            is_resource($destination) => fwrite($destination, $data),
+            $destination instanceof Stringable,
+            is_string($destination) => (function () use ($destination, $data, $context): int|false {
+                set_error_handler(fn (int $errno, string $errstr, string $errfile, int $errline) => true);
+                $rsrc = fopen((string) $destination, mode:'wb', context: $context);
+                if (false === $rsrc) {
+                    restore_error_handler();
+                    throw new RuntimeException('Unable to open the destination file: '.$destination);
+                }
+
+                $bytes = fwrite($rsrc, $data);
+                fclose($rsrc);
+                restore_error_handler();
+
+                return $bytes;
+            })(),
+            default => throw new TypeError('Unsupported destination type; expected SplFileObject, SplFileInfo, resource or a string; '.(is_object($destination) ? $destination::class : gettype($destination)).' given.'),
+        };
+
+        if (false === $res) {
+            throw new RuntimeException('Unable to write to the destination file.');
+        }
+
+        return $res;
     }
 
     /**
@@ -941,65 +1347,57 @@ final class Uri implements UriInterface
         ];
     }
 
-    /**
-     * {@inheritDoc}
-     */
     public function getScheme(): ?string
     {
         return $this->scheme;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     public function getAuthority(): ?string
     {
         return $this->authority;
     }
 
     /**
-     * {@inheritDoc}
+     * Returns the user component encoded value.
+     *
+     * @see https://wiki.php.net/rfc/url_parsing_api
      */
-    public function getUsername(): ?string
+    public function getUser(): ?string
     {
         return $this->user;
     }
 
     /**
-     * {@inheritDoc}
+     * Returns the user component encoded value.
+     *
+     * @codeCoverageIgnore
+     * @see Uri::getUser()
      */
+    public function getUsername(): ?string
+    {
+        return $this->getUser();
+    }
+
     public function getPassword(): ?string
     {
         return $this->pass;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     public function getUserInfo(): ?string
     {
         return $this->userInfo;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     public function getHost(): ?string
     {
         return $this->host;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     public function getPort(): ?int
     {
         return $this->port;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     public function getPath(): string
     {
         return match (true) {
@@ -1008,25 +1406,34 @@ final class Uri implements UriInterface
         };
     }
 
-    /**
-     * {@inheritDoc}
-     */
     public function getQuery(): ?string
     {
         return $this->query;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     public function getFragment(): ?string
     {
         return $this->fragment;
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    public function getOrigin(): ?string
+    {
+        return $this->origin;
+    }
+
+    public function when(callable|bool $condition, callable $onSuccess, ?callable $onFail = null): static
+    {
+        if (!is_bool($condition)) {
+            $condition = $condition($this);
+        }
+
+        return match (true) {
+            $condition => $onSuccess($this),
+            null !== $onFail => $onFail($this),
+            default => $this,
+        } ?? $this;
+    }
+
     public function withScheme(Stringable|string|null $scheme): UriInterface
     {
         $scheme = $this->formatScheme($this->filterString($scheme));
@@ -1086,6 +1493,19 @@ final class Uri implements UriInterface
                 $this->query,
                 $this->fragment,
             ),
+        };
+    }
+
+    public function withUser(Stringable|string|null $user): UriInterface
+    {
+        return $this->withUserInfo($user, $this->pass);
+    }
+
+    public function withPassword(#[SensitiveParameter] Stringable|string|null $password): UriInterface
+    {
+        return match ($this->user) {
+            null => throw new SyntaxError('The password component can not be if the URI user component is not set.'),
+            default => $this->withUserInfo($this->user, $password),
         };
     }
 
@@ -1184,6 +1604,274 @@ final class Uri implements UriInterface
                 $fragment,
             ),
         };
+    }
+
+    /**
+     * Tells whether the `file` scheme base URI represents a local file.
+     */
+    public function isLocalFile(): bool
+    {
+        return match (true) {
+            'file' !== $this->scheme => false,
+            in_array($this->authority, ['', null, 'localhost'], true) => true,
+            default => false,
+        };
+    }
+
+    /**
+     * Tells whether the URI is opaque or not.
+     *
+     * A URI is opaque if and only if it is absolute
+     * and does not have an authority path.
+     */
+    public function isOpaque(): bool
+    {
+        return null === $this->authority
+            && null !== $this->scheme;
+    }
+
+    /**
+     * Tells whether two URI do not share the same origin.
+     */
+    public function isCrossOrigin(UriInterface|Stringable|string $uri): bool
+    {
+        if (null === $this->origin) {
+            return true;
+        }
+
+        $uri = self::tryNew($uri);
+        if (null === $uri || null === ($origin = $uri->getOrigin())) {
+            return true;
+        }
+
+        return $this->origin !== $origin;
+    }
+
+    public function isSameOrigin(Stringable|string $uri): bool
+    {
+        return ! $this->isCrossOrigin($uri);
+    }
+
+    /**
+     * Tells whether the URI is absolute.
+     */
+    public function isAbsolute(): bool
+    {
+        return null !== $this->scheme;
+    }
+
+    /**
+     * Tells whether the URI is a network path.
+     */
+    public function isNetworkPath(): bool
+    {
+        return null === $this->scheme
+            && null !== $this->authority;
+    }
+
+    /**
+     * Tells whether the URI is an absolute path.
+     */
+    public function isAbsolutePath(): bool
+    {
+        return null === $this->scheme
+            && null === $this->authority
+            && '/' === ($this->path[0] ?? '');
+    }
+
+    /**
+     * Tells whether the URI is a relative path.
+     */
+    public function isRelativePath(): bool
+    {
+        return null === $this->scheme
+            && null === $this->authority
+            && '/' !== ($this->path[0] ?? '');
+    }
+
+    /**
+     * Tells whether both URI refers to the same document.
+     */
+    public function isSameDocument(UriInterface|Stringable|string $uri): bool
+    {
+        return $this->equals($uri);
+    }
+
+    public function equals(UriInterface|Stringable|string $uri, bool $excludeFragment = true): bool
+    {
+        if (!$uri instanceof UriInterface) {
+            $uri = self::tryNew($uri);
+        }
+
+        return match(true) {
+            null === $uri => false,
+            $excludeFragment => $uri->withFragment(null)->toNormalizedString() === $this->withFragment(null)->toNormalizedString(),
+            default => $uri->toNormalizedString() === $this->toNormalizedString(),
+        };
+    }
+
+    /**
+     * * @see https://wiki.php.net/rfc/url_parsing_api
+     */
+    public function normalize(): UriInterface
+    {
+        $uriString = $this->toString();
+        if ('' === $uriString) {
+            return $this;
+        }
+
+        return self::new(UriString::normalize($uriString));
+    }
+
+    /**
+     * Resolves a URI against a base URI using RFC3986 rules.
+     *
+     * This method MUST retain the state of the submitted URI instance, and return
+     * a URI instance of the same type that contains the applied modifications.
+     *
+     * This method MUST be transparent when dealing with error and exceptions.
+     * It MUST not alter or silence them apart from validating its own parameters.
+     *
+     * @see https://wiki.php.net/rfc/url_parsing_api
+     */
+    public function resolve(Stringable|string $uri): UriInterface
+    {
+        return self::new(UriString::resolve($uri, $this->toString()));
+    }
+
+    /**
+     * Relativize a URI according to a base URI.
+     *
+     * This method MUST retain the state of the submitted URI instance, and return
+     * a URI instance of the same type that contains the applied modifications.
+     *
+     * This method MUST be transparent when dealing with error and exceptions.
+     * It MUST not alter of silence them apart from validating its own parameters.
+     */
+    public function relativize(Stringable|string $uri): UriInterface
+    {
+        $uri = self::new($uri);
+
+        if (
+            $this->scheme !== $uri->getScheme() ||
+            $this->authority !== $uri->getAuthority() ||
+            $uri->isRelativePath()) {
+            return $uri;
+        }
+
+        $targetPath = $uri->getPath();
+        $basePath = $this->path;
+
+        $uri = $uri
+            ->withScheme(null)
+            ->withUserInfo(null)
+            ->withPort(null)
+            ->withHost(null);
+
+        return match (true) {
+            $targetPath !== $basePath => $uri->withPath(self::relativizePath($targetPath, $basePath)),
+            $this->query === $uri->getQuery() => $uri->withPath('')->withQuery(null),
+            null === $uri->getQuery() => $uri->withPath(self::formatPathWithEmptyBaseQuery($targetPath)),
+            default => $uri->withPath(''),
+        };
+    }
+
+    /**
+     * Formatting the path to keep a resolvable URI.
+     */
+    private static function formatPathWithEmptyBaseQuery(string $path): string
+    {
+        $targetSegments = self::getSegments($path);
+        /** @var string $basename */
+        $basename = end($targetSegments);
+
+        return '' === $basename ? './' : $basename;
+    }
+
+    /**
+     * Relatives the URI for an authority-less target URI.
+     */
+    private static function relativizePath(string $path, string $basePath): string
+    {
+        $baseSegments = self::getSegments($basePath);
+        $targetSegments = self::getSegments($path);
+        $targetBasename = array_pop($targetSegments);
+        array_pop($baseSegments);
+        foreach ($baseSegments as $offset => $segment) {
+            if (!isset($targetSegments[$offset]) || $segment !== $targetSegments[$offset]) {
+                break;
+            }
+            unset($baseSegments[$offset], $targetSegments[$offset]);
+        }
+        $targetSegments[] = $targetBasename;
+
+        return static::formatRelativePath(
+            str_repeat('../', count($baseSegments)).implode('/', $targetSegments),
+            $basePath
+        );
+    }
+
+    /**
+     * Formatting the path to keep a valid URI.
+     */
+    private static function formatRelativePath(string $path, string $basePath): string
+    {
+        $colonPosition = strpos($path, ':');
+        $slashPosition = strpos($path, '/');
+
+        return match (true) {
+            '' === $path => match (true) {
+                '' === $basePath,
+                '/' === $basePath => $basePath,
+                default => './',
+            },
+            false === $colonPosition => $path,
+            false === $slashPosition,
+            $colonPosition < $slashPosition  =>  "./$path",
+            default => $path,
+        };
+    }
+
+    /**
+     * returns the path segments.
+     *
+     * @return array<string>
+     */
+    private static function getSegments(string $path): array
+    {
+        return explode('/', match (true) {
+            '' === $path,
+            '/' !== $path[0] => $path,
+            default => substr($path, 1),
+        });
+    }
+
+    /**
+     * @return ComponentMap
+     */
+    public function __serialize(): array
+    {
+        return $this->toComponents();
+    }
+
+    /**
+     * @param ComponentMap $data
+     */
+    public function __unserialize(array $data): void
+    {
+        $this->scheme = $this->formatScheme($data['scheme'] ?? null);
+        $this->user = Encoder::encodeUser($data['user'] ?? null);
+        $this->pass = Encoder::encodePassword($data['pass'] ?? null);
+        $this->host = $this->formatHost($data['host'] ?? null);
+        $this->port = $this->formatPort($data['port'] ?? null);
+        $this->path = $this->formatPath($data['path'] ?? '');
+        $this->query = Encoder::encodeQueryOrFragment($data['query'] ?? null);
+        $this->fragment = Encoder::encodeQueryOrFragment($data['fragment'] ?? null);
+        $this->userInfo = $this->formatUserInfo($this->user, $this->pass);
+        $this->authority = UriString::buildAuthority($this->toComponents());
+        $this->uri = UriString::buildUri($this->scheme, $this->authority, $this->path, $this->query, $this->fragment);
+        $this->assertValidState();
+        $this->origin = $this->setOrigin();
     }
 
     /**

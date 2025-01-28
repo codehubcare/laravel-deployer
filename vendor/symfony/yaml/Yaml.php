@@ -35,6 +35,8 @@ class Yaml
     public const DUMP_EMPTY_ARRAY_AS_SEQUENCE = 1024;
     public const DUMP_NULL_AS_TILDE = 2048;
     public const DUMP_NUMERIC_KEY_AS_STRING = 4096;
+    public const DUMP_NULL_AS_EMPTY = 8192;
+    public const DUMP_COMPACT_NESTED_MAPPING = 16384;
 
     /**
      * Parses a YAML file into a PHP value.
