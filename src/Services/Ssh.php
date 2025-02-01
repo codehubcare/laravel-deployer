@@ -28,10 +28,7 @@ class Ssh
             $this->ssh = new SSH2($this->host, $this->port);
             $this->sftp = new SFTP($this->host, $this->port);
 
-            if (
-                !$this->ssh->login($this->username, $this->password) ||
-                !$this->sftp->login($this->username, $this->password)
-            ) {
+            if (!$this->ssh->login($this->username, $this->password) || !$this->sftp->login($this->username, $this->password)) {
                 throw new \Exception('Login failed');
             }
 
@@ -64,12 +61,80 @@ class Ssh
         return $this->sftp->put($destination, $file, SFTP::SOURCE_LOCAL_FILE);
     }
 
+    public function uploadDirectory($directory, $destination)
+    {
+        if (!$this->sftp) {
+            throw new \Exception('Not connected');
+        }
+        
+        // Ensure the destination directory exists on the remote server
+        if (!$this->sftp->is_dir($destination)) {
+            $this->sftp->mkdir($destination, 0777, true);
+        }
+
+        // Get the list of files and directories in the specified local directory
+        $items = scandir($directory);
+
+        foreach ($items as $item) {
+            if ($item === '.' || $item === '..') {
+                continue;
+            }
+
+            $localPath = $directory . '/' . $item;
+            $remotePath = $destination . '/' . $item;
+
+            if (is_dir($localPath)) {
+                // Recursively upload subdirectory
+                $this->uploadDirectory($localPath, $remotePath);
+            } else {
+                // Upload file
+                $this->sftp->put($remotePath, $localPath, SFTP::SOURCE_LOCAL_FILE);
+            }
+        }
+
+        return true;
+    }
+
     public function download($file, $destination)
     {
         if (!$this->sftp) {
             throw new \Exception('Not connected');
         }
         return $this->sftp->get($file, $destination);
+    }
+
+    public function downloadDirectory($directory, $destination)
+    {
+        if (!$this->sftp) {
+            throw new \Exception('Not connected');
+        }
+
+        // Ensure the destination directory exists
+        if (!is_dir($destination)) {
+            mkdir($destination, 0777, true);
+        }
+
+        // Get the list of files and directories in the specified directory
+        $items = $this->sftp->nlist($directory);
+
+        foreach ($items as $item) {
+            if ($item === '.' || $item === '..') {
+                continue;
+            }
+
+            $remotePath = $directory . '/' . $item;
+            $localPath = $destination . '/' . $item;
+
+            if ($this->sftp->is_dir($remotePath)) {
+                // Recursively download subdirectory
+                $this->downloadDirectory($remotePath, $localPath);
+            } else {
+                // Download file
+                $this->sftp->get($remotePath, $localPath);
+            }
+        }
+
+        return true;
     }
 
     public function delete($file)
