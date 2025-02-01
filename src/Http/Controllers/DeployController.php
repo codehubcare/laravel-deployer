@@ -18,9 +18,16 @@ class DeployController extends Controller
     
         $serverPath = $this->getSrcPath('config');
         $localPath = config_path();
+
+        $destinationPath = $this->getSrcPath();
+        $appFolder = app_path();
+        $resourcesFolder = resource_path();
+        $routeFolder = base_path('routes');
+
+        // $ssh->uploadDirectory($appFolder, $destinationPath . '/app');
+        // $ssh->uploadDirectory($resourcesFolder, $destinationPath . '/resources');
+        // $ssh->uploadDirectory($routeFolder, $destinationPath . '/routes');
         
-        dd($ssh->downloadDirectory($serverPath, $localPath));
-        // dd($ssh->execute('cd src && pwd'));
 
     }
 
