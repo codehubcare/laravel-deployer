@@ -73,9 +73,16 @@ class DeployCommand extends Command
 
         $server = $this->connectToServer();
 
-        $response = $server->execute('cd src && composer install --optimize-autoloader --no-dev');
+        // Debug this issue
+        // $server->execute('cd src && composer install --optimize-autloader --no-dev');
 
-        $this->info($response);
+        // Optimize route 
+        $server->execute('cd src && php artisan cache:clear');
+        $server->execute('cd src && php artisan config:clear');
+        
+        // Optimize route
+        $server->execute('cd src && php artisan route:clear');
+        $server->execute('cd src && php artisan view:clear');
 
         $this->info('Post deployment commands executed successfully');
 
