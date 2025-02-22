@@ -9,6 +9,6 @@ composer require codehubcare/laravel-deployer --dev
 
 To publish the Laravel Deployer configuration file, run the following command:
 ```bash
-php artisan vendor:publish
+php artisan vendor:publish --provider="Codehubcare\LaravelDeployer\LaravelDeployerServiceProvider"
 ```
-From the list of providers, select the package to publish its configuration. This will create a laravel-config.php file in your application’s config directory.
+This will create a laravel-config.php file in your application’s config directory.
