@@ -10,17 +10,12 @@ return [
     | You can generate a token at https://github.com/settings/tokens
     |
     */
-    'github_token' => env('GITHUB_TOKEN', 'Iv23liRQJ3IIwR8ACOc5'),
-
-
-    'public_path' => '/home1/jaheeuwx/public_html',
-
-    'src_path' => '/home1/jaheeuwx/src',
+    'github_token' => env('GITHUB_TOKEN', ''),
 
     'ftp' => [
-        'host' => 'ftp.jaheedtrading.com',
-        'username' => 'jaheeuwx',
-        'password' => 'Admin##12332',
-        'port' => 21,
+        'host' => env('FTP_HOST', ''),
+        'username' => env('FTP_USERNAME', ''),
+        'password' => env('FTP_PASSWORD', ''),
+        'port' => env('FTP_PORT', 21),
     ],
 ];
