@@ -9,11 +9,20 @@ class DeployController extends Controller
 {
 
     /**
+     * Show the index page
+     */
+    public function index()
+    {
+        return view('index');
+    }
+
+
+    /**
      * Run deploy
      */
     public function run()
     {
-        $ssh = new Ssh('jaheedtrading.com', 'jaheeuwx', 'Admin##12332');
+        $ssh = new Ssh(config("laravel-deployer.host"), config('laravel-deployer.username'), config('laravel-deployer.password'));
         $ssh->connect();
     
         $serverPath = $this->getSrcPath('config');

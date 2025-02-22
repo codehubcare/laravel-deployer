@@ -27,5 +27,9 @@ class LaravelDeployerServiceProvider extends ServiceProvider
         $this->publishes([
             __DIR__ . '/../config/laravel-deployer.php' => config_path('laravel-deployer.php'),
         ]);
+
+        // Load the views
+        $this->loadViewsFrom(__DIR__.'/../resources/views', 'laravel-deployer');
+
     }
 }
