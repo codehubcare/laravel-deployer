@@ -13,7 +13,7 @@ class DeployController extends Controller
      */
     public function index()
     {
-        return view('index');
+        return view('laravel-deployer::index');
     }
 
 
