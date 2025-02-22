@@ -38,7 +38,7 @@ This command creates a config/laravel-deployer.php file in your Laravel applicat
 ### Environment Variables
 
 Update your .env file with the following variables:
-```json
+```env
 LARAVEL_DEPLOYER_SRC_PATH=src
 LARAVEL_DEPLOYER_PUBLIC_PATH=public_html
 
