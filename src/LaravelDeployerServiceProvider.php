@@ -20,6 +20,12 @@ class LaravelDeployerServiceProvider extends ServiceProvider
      */
     public function boot()
     {
+        // Load the routes
         $this->loadRoutesFrom(__DIR__ . '/routes/web.php');
+
+        // Publish the configuration file
+        $this->publishes([
+            __DIR__ . '/../config/laravel-deployer.php' => config_path('laravel-deployer.php'),
+        ]);
     }
 }
