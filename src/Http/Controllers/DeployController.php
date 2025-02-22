@@ -4,6 +4,7 @@ namespace CodehubCare\LaravelDeployer\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use Codehubcare\LaravelDeployer\Services\Ssh;
+use Illuminate\Support\Str;
 
 class DeployController extends Controller
 {
@@ -13,7 +14,53 @@ class DeployController extends Controller
      */
     public function index()
     {
-        return view('laravel-deployer::index');
+
+        $changedFiles = [];
+        $response = '';
+
+        // List current edited files
+        exec('git diff --name-status HEAD origin/main', $changedFiles);
+
+        $changedFiles = collect($changedFiles)->map(function ($file) {
+            $file = Str::replace('../', '', $file);
+            return Str::trim(Str::substr($file, 2));
+        });
+
+    
+        $server = $this->connectToServer();
+        $response = $server->execute('ls');
+
+        dd($response, $server);
+
+        return view('laravel-deployer::index', compact('changedFiles'));
+    }
+
+
+    /**
+     * Set src and public paths
+     * 
+     */
+    private function setServerPaths()
+    {
+        $server = $this->connectToServer();
+
+        $srcPath = trim($server->execute('cd src && pwd'));
+        $publicPath = trim($server->execute('cd public_html && pwd'));
+
+        return [
+            $srcPath,
+            $publicPath,
+        ];
+    }
+
+    /**
+     * Connect to Server
+     */
+    private function connectToServer()
+    {
+        $ssh = new Ssh(config("laravel-deployer.ftp.host"), config('laravel-deployer.ftp.username'), config('laravel-deployer.ftp.password'));
+        $ssh->connect();
+        return $ssh;
     }
 
 
@@ -22,21 +69,23 @@ class DeployController extends Controller
      */
     public function run()
     {
-        $ssh = new Ssh(config("laravel-deployer.host"), config('laravel-deployer.username'), config('laravel-deployer.password'));
+        $ssh = new Ssh(config("laravel-deployer.ftp.host"), config('laravel-deployer.ftp.username'), config('laravel-deployer.ftp.password'));
         $ssh->connect();
-    
-        $serverPath = $this->getSrcPath('config');
-        $localPath = config_path();
 
+
+        
         $destinationPath = $this->getSrcPath();
         $appFolder = app_path();
         $resourcesFolder = resource_path();
         $routeFolder = base_path('routes');
 
-        // $ssh->uploadDirectory($appFolder, $destinationPath . '/app');
-        // $ssh->uploadDirectory($resourcesFolder, $destinationPath . '/resources');
-        // $ssh->uploadDirectory($routeFolder, $destinationPath . '/routes');
+        $ssh->uploadDirectory($appFolder, $destinationPath . '/app');
+        $ssh->uploadDirectory($resourcesFolder, $destinationPath . '/resources');
+        $ssh->uploadDirectory($routeFolder, $destinationPath . '/routes');
         
+        $ssh->disconnect();
+        
+        return "done";
 
     }
 
@@ -48,7 +97,6 @@ class DeployController extends Controller
     public function getSrcPath($path = '')
     {
         
-        return "/home1/jaheeuwx/src/" . $path;
-        // return config('laravel-deployer.src_path') . $path;
+        return config('laravel-deployer.src_path') . $path;
     }
 }

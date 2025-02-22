@@ -12,6 +12,9 @@ return [
     */
     'github_token' => env('GITHUB_TOKEN', ''),
 
+    'src_path' => '',
+    'public_path' => '',
+
     'ftp' => [
         'host' => env('FTP_HOST', ''),
         'username' => env('FTP_USERNAME', ''),

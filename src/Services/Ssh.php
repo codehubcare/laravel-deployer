@@ -4,6 +4,7 @@ namespace Codehubcare\LaravelDeployer\Services;
 
 use phpseclib3\Net\SFTP;
 use phpseclib3\Net\SSH2;
+use Illuminate\Support\Facades\Log;
 
 class Ssh
 {
@@ -61,19 +62,38 @@ class Ssh
         return $this->sftp->put($destination, $file, SFTP::SOURCE_LOCAL_FILE);
     }
 
+    /**
+     * Uploads a directory recursively to the remote server.
+     *
+     * @param string $directory The local directory path to upload.
+     * @param string $destination The remote directory path to upload to.
+     * @return void
+     */
     public function uploadDirectory($directory, $destination)
     {
         if (!$this->sftp) {
+            Log::error('Not connected');
             throw new \Exception('Not connected');
         }
         
-        // Ensure the destination directory exists on the remote server
+        Log::info("Starting upload from $directory to $destination");
+        
+        // Ensure trailing slash consistency
+        $directory = rtrim($directory, '/');
+        $destination = rtrim($destination, '/');
+        
+        // Verify and create destination directory
         if (!$this->sftp->is_dir($destination)) {
-            $this->sftp->mkdir($destination, 0777, true);
+            if (!$this->sftp->mkdir($destination, 0777, true)) {
+                throw new \Exception("Failed to create directory: $destination");
+            }
+            Log::info("Created directory: $destination");
         }
 
-        // Get the list of files and directories in the specified local directory
         $items = scandir($directory);
+        if ($items === false) {
+            throw new \Exception("Failed to read directory: $directory");
+        }
 
         foreach ($items as $item) {
             if ($item === '.' || $item === '..') {
@@ -84,11 +104,16 @@ class Ssh
             $remotePath = $destination . '/' . $item;
 
             if (is_dir($localPath)) {
-                // Recursively upload subdirectory
+                Log::info("Processing directory: $localPath");
                 $this->uploadDirectory($localPath, $remotePath);
             } else {
-                // Upload file
-                $this->sftp->put($remotePath, $localPath, SFTP::SOURCE_LOCAL_FILE);
+                Log::info("Uploading file: $localPath to $remotePath");
+                $result = $this->sftp->put($remotePath, $localPath, SFTP::SOURCE_LOCAL_FILE);
+                if ($result === false) {
+                    Log::error("Upload failed for: $localPath");
+                } else {
+                    Log::info("Successfully uploaded: $localPath");
+                }
             }
         }
 

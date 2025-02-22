@@ -2,6 +2,7 @@
 
 namespace Codehubcare\LaravelDeployer;
 
+use Codehubcare\LaravelDeployer\Commands\DeployCommand;
 use Illuminate\Support\ServiceProvider;
 
 class LaravelDeployerServiceProvider extends ServiceProvider
@@ -42,5 +43,12 @@ class LaravelDeployerServiceProvider extends ServiceProvider
             ],
             'laravel-deployer-config',
         );
+
+        // Register the artisan commands
+        if ($this->app->runningInConsole()) {
+            $this->commands([
+                DeployCommand::class,
+            ]);
+        }
     }
 }
