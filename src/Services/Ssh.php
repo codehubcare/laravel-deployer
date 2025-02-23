@@ -5,6 +5,7 @@ namespace Codehubcare\LaravelDeployer\Services;
 use phpseclib3\Net\SFTP;
 use phpseclib3\Net\SSH2;
 
+
 class Ssh
 {
     private $ssh;
@@ -22,6 +23,12 @@ class Ssh
         $this->port = $port;
     }
 
+
+    /**
+     * Connect to server
+     *
+     * @return void
+     */
     public function connect()
     {
         try {
@@ -38,6 +45,11 @@ class Ssh
         }
     }
 
+    /**
+     * Disconnect from server
+     *
+     * @return void
+     */
     public function disconnect()
     {
         $this->ssh = null;
@@ -45,6 +57,12 @@ class Ssh
         return true;
     }
 
+    /**
+     * Execute a command on the remote server
+     *
+     * @param string $command
+     * @return string
+     */
     public function execute($command)
     {
         if (!$this->ssh) {
@@ -53,6 +71,13 @@ class Ssh
         return $this->ssh->exec($command);
     }
 
+    /**
+     *  Uploads a file to the remote server.
+     *
+     * @param string $file
+     * @param string $destination
+     * @return void
+     */
     public function upload($file, $destination)
     {
         if (!$this->sftp) {
@@ -108,6 +133,13 @@ class Ssh
         return true;
     }
 
+    /**
+     * Downloads a file from the remote server.
+     *
+     * @param string $file
+     * @param string $destination
+     * @return void
+     */
     public function download($file, $destination)
     {
         if (!$this->sftp) {
@@ -116,6 +148,13 @@ class Ssh
         return $this->sftp->get($file, $destination);
     }
 
+    /**
+     * Downloads a directory from the remote server.
+     *
+     * @param string $directory The remote directory path to download.
+     * @param string $destination The local directory path to download to.
+     * @return void
+     */
     public function downloadDirectory($directory, $destination)
     {
         if (!$this->sftp) {
@@ -150,6 +189,12 @@ class Ssh
         return true;
     }
 
+    /**
+     * Deletes a file from the remote server.
+     *
+     * @param string $file The remote file path to delete.
+     * @return bool True on success, false on failure.
+     */
     public function delete($file)
     {
         if (!$this->sftp) {
@@ -158,6 +203,12 @@ class Ssh
         return $this->sftp->delete($file);
     }
 
+    /**
+     * Lists the contents of a directory on the remote server.
+     *
+     * @param string $directory The remote directory path to list. Defaults to '.'.
+     * @return array An array of file and directory names.
+     */
     public function list($directory = '.')
     {
         if (!$this->sftp) {
@@ -166,6 +217,12 @@ class Ssh
         return $this->sftp->nlist($directory);
     }
 
+    /**
+     * Gets the file stats from the remote server.
+     *
+     * @param string $file The remote file path to get stats for.
+     * @return array An array of file stats.
+     */
     public function getFile($file)
     {
         if (!$this->sftp) {
@@ -174,6 +231,12 @@ class Ssh
         return $this->sftp->stat($file);
     }
 
+    /**
+     * Gets the stats of a directory on the remote server.
+     *
+     * @param string $directory The remote directory path to get stats for.
+     * @return array An array of directory stats.
+     */
     public function getDirectory($directory)
     {
         if (!$this->sftp) {
@@ -182,6 +245,12 @@ class Ssh
         return $this->sftp->stat($directory);
     }
 
+    /**
+     * Gets the content of a file from the remote server.
+     *
+     * @param string $file The remote file path to get content for.
+     * @return string The file content.
+     */
     public function getFileContent($file)
     {
         if (!$this->sftp) {
@@ -190,7 +259,13 @@ class Ssh
         return $this->sftp->get($file);
     }
 
-    public function getDirectoryContent($directory)
+    /**
+     * Lists the contents of a directory on the remote server.
+     *
+     * @param string $directory The remote directory path to list. Defaults to '.'.
+     * @return array An array of file and directory names.
+     */
+    public function getDirectoryContent($directory = '.')
     {
         if (!$this->sftp) {
             throw new \Exception('Not connected');
@@ -198,6 +273,12 @@ class Ssh
         return $this->sftp->rawlist($directory);
     }
 
+    /**
+     * Gets the size of a file from the remote server.
+     *
+     * @param string $file The remote file path to get size for.
+     * @return int|null The file size in bytes, or null if not found.
+     */
     public function getFileSize($file)
     {
         if (!$this->sftp) {
@@ -207,6 +288,12 @@ class Ssh
         return $stat['size'] ?? null;
     }
 
+    /**
+     * Gets the permissions of a file from the remote server.
+     *
+     * @param string $file The remote file path to get permissions for.
+     * @return int|null The file permissions, or null if not found.
+     */
     public function getFilePermissions($file)
     {
         if (!$this->sftp) {
@@ -216,6 +303,12 @@ class Ssh
         return $stat['permissions'] ?? null;
     }
 
+    /**
+     * Gets the owner of a file from the remote server.
+     *
+     * @param string $file The remote file path to get owner for.
+     * @return int|null The file owner, or null if not found.
+     */
     public function getFileOwner($file)
     {
         if (!$this->sftp) {
@@ -225,6 +318,12 @@ class Ssh
         return $stat['uid'] ?? null;
     }
 
+    /**
+     * Gets the group of a file from the remote server.
+     *
+     * @param string $file The remote file path to get group for.
+     * @return int|null The file group, or null if not found.
+     */
     public function getFileGroup($file)
     {
         if (!$this->sftp) {
@@ -234,6 +333,12 @@ class Ssh
         return $stat['gid'] ?? null;
     }
 
+    /**
+     * Gets the last modified time of a file from the remote server.
+     *
+     * @param string $file The remote file path to get last modified time for.
+     * @return int|null The file last modified time in Unix timestamp, or null if not found.
+     */
     public function getFileLastModified($file)
     {
         if (!$this->sftp) {
