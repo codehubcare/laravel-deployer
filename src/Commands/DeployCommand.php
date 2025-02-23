@@ -65,28 +65,27 @@ class DeployCommand extends Command
 
     /**
      * Run post deployment commands
+     * @return void
      */
     private function runPostDeploymentCommands()
     {
-        $response = '';
         $this->info('Running post deployment commands...');
 
         $server = $this->connectToServer();
 
-        // Debug this issue
-        // $server->execute('cd src && composer install --optimize-autloader --no-dev');
+        $commands = [
+            'cd src && php artisan cache:clear',
+            'cd src && php artisan config:clear',
+            'cd src && php artisan route:clear',
+            'cd src && php artisan view:clear',
+        ];
 
-        // Optimize route 
-        $server->execute('cd src && php artisan cache:clear');
-        $server->execute('cd src && php artisan config:clear');
-        
-        // Optimize route
-        $server->execute('cd src && php artisan route:clear');
-        $server->execute('cd src && php artisan view:clear');
+        foreach ($commands as $command) {
+            $server->execute($command);
+        }
 
         $this->info('Post deployment commands executed successfully');
 
-        // Discount
         $server->disconnect();
     }
 }

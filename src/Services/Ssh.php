@@ -4,7 +4,6 @@ namespace Codehubcare\LaravelDeployer\Services;
 
 use phpseclib3\Net\SFTP;
 use phpseclib3\Net\SSH2;
-use Illuminate\Support\Facades\Log;
 
 class Ssh
 {
@@ -72,12 +71,9 @@ class Ssh
     public function uploadDirectory($directory, $destination)
     {
         if (!$this->sftp) {
-            Log::error('Not connected');
             throw new \Exception('Not connected');
         }
-        
-        Log::info("Starting upload from $directory to $destination");
-        
+                
         // Ensure trailing slash consistency
         $directory = rtrim($directory, '/');
         $destination = rtrim($destination, '/');
@@ -87,7 +83,6 @@ class Ssh
             if (!$this->sftp->mkdir($destination, 0777, true)) {
                 throw new \Exception("Failed to create directory: $destination");
             }
-            Log::info("Created directory: $destination");
         }
 
         $items = scandir($directory);
@@ -104,16 +99,9 @@ class Ssh
             $remotePath = $destination . '/' . $item;
 
             if (is_dir($localPath)) {
-                Log::info("Processing directory: $localPath");
                 $this->uploadDirectory($localPath, $remotePath);
             } else {
-                Log::info("Uploading file: $localPath to $remotePath");
-                $result = $this->sftp->put($remotePath, $localPath, SFTP::SOURCE_LOCAL_FILE);
-                if ($result === false) {
-                    Log::error("Upload failed for: $localPath");
-                } else {
-                    Log::info("Successfully uploaded: $localPath");
-                }
+                $this->sftp->put($remotePath, $localPath, SFTP::SOURCE_LOCAL_FILE);
             }
         }
 
