@@ -8,6 +8,7 @@ use Exception;
 
 class DeployCommand extends Command
 {
+    
     protected $signature = 'laravel-deployer:deploy';
 
     protected $description = 'Deploy the application';
@@ -39,6 +40,10 @@ class DeployCommand extends Command
             // Upload Database folder
             $server->uploadDirectory(base_path('database') . '/', config('laravel-deployer.src_path') . '/database');
             $this->info('Database folder uploaded successfully');
+
+            // Upload Public folder
+            $server->uploadDirectory(base_path('public') . '/', config('laravel-deployer.src_path') . '/public');
+            $this->info('Public folder uploaded successfully');
 
             // Run post deployment commands
             $this->runPostDeploymentCommands();
