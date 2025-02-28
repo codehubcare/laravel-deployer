@@ -46,7 +46,7 @@ class DeployCommand extends Command
                 $this->info('Uploading ' . basename($directory) . '...');
 
                 $server->uploadDirectory($directory, config('laravel-deployer.src_path') . '/' . basename($directory));
-                $this->info(basename($directory) . ' uploaded successfully');
+                $this->info(basename($directory) . ' uploaded successfully to: ' . config('laravel-deployer.src_path') . '/' . basename($directory));
             }
 
             // Upload all files from the Laravel root path to the remote server except .env file
@@ -65,7 +65,7 @@ class DeployCommand extends Command
                 $this->info('Uploading ' . basename($file) . '...');
 
                 $server->upload($file, config('laravel-deployer.src_path') . '/' . basename($file));
-                $this->info(basename($file) . ' uploaded successfully');
+                $this->info(basename($file) . ' uploaded successfully to: ' . config('laravel-deployer.src_path') . '/' . basename($file));
             }
 
 
@@ -80,7 +80,7 @@ class DeployCommand extends Command
 
                 $this->info('Uploading ' . basename($file) . '...');
                 $server->upload($file, config('laravel-deployer.public_path') . '/public/' . basename($file));
-                $this->info(basename($file) . 'uploaded successfully');
+                $this->info(basename($file) . 'uploaded successfully to: ' . config('laravel-deployer.public_path') . '/public/' . basename($file));
             }
 
 
