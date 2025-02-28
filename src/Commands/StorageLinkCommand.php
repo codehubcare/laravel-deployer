@@ -2,6 +2,7 @@
 namespace Codehubcare\LaravelDeployer\Commands;
 
 use Illuminate\Console\Command;
+use Codehubcare\LaravelDeployer\Services\Ssh;
 
 class StorageLinkCommand extends Command
 {
