@@ -24,7 +24,7 @@ class DeployCommand extends Command
             $this->info('✅ Connected successfully');
 
             // Get excluded directories
-            $defaultExcludes = ['vendor', 'node_modules', 'storage'];
+            $defaultExcludes = ['vendor', 'node_modules', 'storage', 'public'];
             $excludedDirectories = $this->askWithCompletion(
                 '📂 Enter directories to exclude (comma-separated)',
                 $defaultExcludes
