@@ -4,7 +4,7 @@ namespace Codehubcare\LaravelDeployer\Commands;
 
 use Illuminate\Console\Command;
 
-class SshDetails extends Command
+class SshDetailsCommand extends Command
 {
     /**
      * The name and signature of the console command.

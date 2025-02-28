@@ -3,7 +3,8 @@
 namespace Codehubcare\LaravelDeployer;
 
 use Codehubcare\LaravelDeployer\Commands\DeployCommand;
-use Codehubcare\LaravelDeployer\Commands\SshDetails;
+use Codehubcare\LaravelDeployer\Commands\SshDetailsCommand;
+use Codehubcare\LaravelDeployer\Commands\StorageLinkCommand;
 use Illuminate\Support\ServiceProvider;
 
 class LaravelDeployerServiceProvider extends ServiceProvider
@@ -49,7 +50,8 @@ class LaravelDeployerServiceProvider extends ServiceProvider
         if ($this->app->runningInConsole()) {
             $this->commands([
                 DeployCommand::class,
-                SshDetails::class,
+                SshDetailsCommand::class,
+                StorageLinkCommand::class,
             ]);
         }
     }
