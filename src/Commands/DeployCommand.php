@@ -106,7 +106,7 @@ class DeployCommand extends Command
                     continue;
                 }
                 
-                $targetPath = config('laravel-deployer.public_path') . '/public/' . basename($item);
+                $targetPath = config('laravel-deployer.public_path') . '/' . basename($item);
                 $targetPath2 = config('laravel-deployer.public_path') . '/' . basename($item);
                 
                 if (is_dir($item)) {
