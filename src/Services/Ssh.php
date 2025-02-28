@@ -4,7 +4,7 @@ namespace Codehubcare\LaravelDeployer\Services;
 
 use phpseclib3\Net\SFTP;
 use phpseclib3\Net\SSH2;
-use Illuminate\Support\Facades\Log;
+
 
 class Ssh
 {
@@ -23,6 +23,12 @@ class Ssh
         $this->port = $port;
     }
 
+
+    /**
+     * Connect to server
+     *
+     * @return void
+     */
     public function connect()
     {
         try {
@@ -39,6 +45,11 @@ class Ssh
         }
     }
 
+    /**
+     * Disconnect from server
+     *
+     * @return void
+     */
     public function disconnect()
     {
         $this->ssh = null;
@@ -46,6 +57,12 @@ class Ssh
         return true;
     }
 
+    /**
+     * Execute a command on the remote server
+     *
+     * @param string $command
+     * @return string
+     */
     public function execute($command)
     {
         if (!$this->ssh) {
@@ -54,6 +71,13 @@ class Ssh
         return $this->ssh->exec($command);
     }
 
+    /**
+     *  Uploads a file to the remote server.
+     *
+     * @param string $file
+     * @param string $destination
+     * @return void
+     */
     public function upload($file, $destination)
     {
         if (!$this->sftp) {
@@ -69,57 +93,73 @@ class Ssh
      * @param string $destination The remote directory path to upload to.
      * @return void
      */
-    public function uploadDirectory($directory, $destination)
+    public function uploadDirectory($directory, $destination, $skipExisting = false)
     {
         if (!$this->sftp) {
-            Log::error('Not connected');
             throw new \Exception('Not connected');
         }
-        
-        Log::info("Starting upload from $directory to $destination");
         
         // Ensure trailing slash consistency
         $directory = rtrim($directory, '/');
         $destination = rtrim($destination, '/');
         
-        // Verify and create destination directory
+        // Verify source directory exists
+        if (!is_dir($directory)) {
+            throw new \Exception("Source directory does not exist: $directory");
+        }
+
+        // Create destination directory if it doesn't exist
         if (!$this->sftp->is_dir($destination)) {
             if (!$this->sftp->mkdir($destination, 0777, true)) {
-                throw new \Exception("Failed to create directory: $destination");
+                throw new \Exception("Failed to create remote directory: $destination");
             }
-            Log::info("Created directory: $destination");
         }
 
-        $items = scandir($directory);
-        if ($items === false) {
-            throw new \Exception("Failed to read directory: $directory");
-        }
+        try {
+            $iterator = new \RecursiveIteratorIterator(
+                new \RecursiveDirectoryIterator($directory, \RecursiveDirectoryIterator::SKIP_DOTS),
+                \RecursiveIteratorIterator::SELF_FIRST
+            );
 
-        foreach ($items as $item) {
-            if ($item === '.' || $item === '..') {
-                continue;
-            }
+            foreach ($iterator as $item) {
+                $localPath = $item->getPathname();
+                $relativePath = substr($localPath, strlen($directory) + 1);
+                $remotePath = $destination . '/' . $relativePath;
 
-            $localPath = $directory . '/' . $item;
-            $remotePath = $destination . '/' . $item;
-
-            if (is_dir($localPath)) {
-                Log::info("Processing directory: $localPath");
-                $this->uploadDirectory($localPath, $remotePath);
-            } else {
-                Log::info("Uploading file: $localPath to $remotePath");
-                $result = $this->sftp->put($remotePath, $localPath, SFTP::SOURCE_LOCAL_FILE);
-                if ($result === false) {
-                    Log::error("Upload failed for: $localPath");
+                if ($item->isDir()) {
+                    if (!$this->sftp->is_dir($remotePath)) {
+                        $this->sftp->mkdir($remotePath, 0777, true);
+                    }
                 } else {
-                    Log::info("Successfully uploaded: $localPath");
+                    // Skip existing files if requested
+                    if ($skipExisting && $this->sftp->file_exists($remotePath)) {
+                        continue;
+                    }
+
+                    // Upload file with error handling
+                    $result = $this->sftp->put($remotePath, $localPath, SFTP::SOURCE_LOCAL_FILE);
+                    if ($result === false) {
+                        throw new \Exception("Failed to upload file: $localPath");
+                    }
+
+                    // Free up memory
+                    clearstatcache(true, $localPath);
                 }
             }
-        }
 
-        return true;
+            return true;
+        } catch (\Exception $e) {
+            throw new \Exception('Upload failed: ' . $e->getMessage());
+        }
     }
 
+    /**
+     * Downloads a file from the remote server.
+     *
+     * @param string $file
+     * @param string $destination
+     * @return void
+     */
     public function download($file, $destination)
     {
         if (!$this->sftp) {
@@ -128,6 +168,13 @@ class Ssh
         return $this->sftp->get($file, $destination);
     }
 
+    /**
+     * Downloads a directory from the remote server.
+     *
+     * @param string $directory The remote directory path to download.
+     * @param string $destination The local directory path to download to.
+     * @return void
+     */
     public function downloadDirectory($directory, $destination)
     {
         if (!$this->sftp) {
@@ -162,6 +209,12 @@ class Ssh
         return true;
     }
 
+    /**
+     * Deletes a file from the remote server.
+     *
+     * @param string $file The remote file path to delete.
+     * @return bool True on success, false on failure.
+     */
     public function delete($file)
     {
         if (!$this->sftp) {
@@ -170,6 +223,12 @@ class Ssh
         return $this->sftp->delete($file);
     }
 
+    /**
+     * Lists the contents of a directory on the remote server.
+     *
+     * @param string $directory The remote directory path to list. Defaults to '.'.
+     * @return array An array of file and directory names.
+     */
     public function list($directory = '.')
     {
         if (!$this->sftp) {
@@ -178,6 +237,12 @@ class Ssh
         return $this->sftp->nlist($directory);
     }
 
+    /**
+     * Gets the file stats from the remote server.
+     *
+     * @param string $file The remote file path to get stats for.
+     * @return array An array of file stats.
+     */
     public function getFile($file)
     {
         if (!$this->sftp) {
@@ -186,6 +251,12 @@ class Ssh
         return $this->sftp->stat($file);
     }
 
+    /**
+     * Gets the stats of a directory on the remote server.
+     *
+     * @param string $directory The remote directory path to get stats for.
+     * @return array An array of directory stats.
+     */
     public function getDirectory($directory)
     {
         if (!$this->sftp) {
@@ -194,6 +265,12 @@ class Ssh
         return $this->sftp->stat($directory);
     }
 
+    /**
+     * Gets the content of a file from the remote server.
+     *
+     * @param string $file The remote file path to get content for.
+     * @return string The file content.
+     */
     public function getFileContent($file)
     {
         if (!$this->sftp) {
@@ -202,7 +279,13 @@ class Ssh
         return $this->sftp->get($file);
     }
 
-    public function getDirectoryContent($directory)
+    /**
+     * Lists the contents of a directory on the remote server.
+     *
+     * @param string $directory The remote directory path to list. Defaults to '.'.
+     * @return array An array of file and directory names.
+     */
+    public function getDirectoryContent($directory = '.')
     {
         if (!$this->sftp) {
             throw new \Exception('Not connected');
@@ -210,6 +293,12 @@ class Ssh
         return $this->sftp->rawlist($directory);
     }
 
+    /**
+     * Gets the size of a file from the remote server.
+     *
+     * @param string $file The remote file path to get size for.
+     * @return int|null The file size in bytes, or null if not found.
+     */
     public function getFileSize($file)
     {
         if (!$this->sftp) {
@@ -219,6 +308,12 @@ class Ssh
         return $stat['size'] ?? null;
     }
 
+    /**
+     * Gets the permissions of a file from the remote server.
+     *
+     * @param string $file The remote file path to get permissions for.
+     * @return int|null The file permissions, or null if not found.
+     */
     public function getFilePermissions($file)
     {
         if (!$this->sftp) {
@@ -228,6 +323,12 @@ class Ssh
         return $stat['permissions'] ?? null;
     }
 
+    /**
+     * Gets the owner of a file from the remote server.
+     *
+     * @param string $file The remote file path to get owner for.
+     * @return int|null The file owner, or null if not found.
+     */
     public function getFileOwner($file)
     {
         if (!$this->sftp) {
@@ -237,6 +338,12 @@ class Ssh
         return $stat['uid'] ?? null;
     }
 
+    /**
+     * Gets the group of a file from the remote server.
+     *
+     * @param string $file The remote file path to get group for.
+     * @return int|null The file group, or null if not found.
+     */
     public function getFileGroup($file)
     {
         if (!$this->sftp) {
@@ -246,6 +353,12 @@ class Ssh
         return $stat['gid'] ?? null;
     }
 
+    /**
+     * Gets the last modified time of a file from the remote server.
+     *
+     * @param string $file The remote file path to get last modified time for.
+     * @return int|null The file last modified time in Unix timestamp, or null if not found.
+     */
     public function getFileLastModified($file)
     {
         if (!$this->sftp) {

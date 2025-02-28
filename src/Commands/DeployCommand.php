@@ -8,48 +8,140 @@ use Exception;
 
 class DeployCommand extends Command
 {
+    
     protected $signature = 'laravel-deployer:deploy';
 
     protected $description = 'Deploy the application';
 
     public function handle()
     {
-        $this->info('Deploying the application...');
+        $this->info('🚀 Starting deployment process...');
 
         try {
             // Connect remote server
+            $this->info('📡 Connecting to remote server...');
             $server = $this->connectToServer();
+            $this->info('✅ Connected successfully');
 
-            // Upload App folder
-            $server->uploadDirectory(base_path('app') . '/', config('laravel-deployer.src_path') . '/app');
-            $this->info('App folder uploaded successfully');
+            // Get excluded directories
+            $defaultExcludes = ['vendor', 'node_modules', 'storage'];
+            $excludedDirectories = $this->askWithCompletion(
+                '📂 Enter directories to exclude (comma-separated)',
+                $defaultExcludes
+            );
+            $excludedDirectories = array_unique(array_merge(
+                array_map('trim', explode(',', $excludedDirectories)),
+                $defaultExcludes
+            ));
 
-            // Upload Resources folder
-            $server->uploadDirectory(resource_path(), config('laravel-deployer.src_path') . '/resources');
-            $this->info('Resources folder uploaded successfully');
+            $this->info('🔒 Excluded directories: ' . implode(', ', $excludedDirectories));
+            $this->newLine();
 
-            // Upload Routes folder
-            $server->uploadDirectory(base_path('routes') . '/', config('laravel-deployer.src_path') . '/routes');
-            $this->info('Routes folder uploaded successfully');
+            // Upload directories
+            $directories = glob(base_path() . '/*', GLOB_ONLYDIR);
+            $dirCount = count(array_filter($directories, fn($dir) => !in_array(basename($dir), $excludedDirectories)));
+            
+            $dirBar = $this->output->createProgressBar($dirCount);
+            $dirBar->setFormat('📤 Uploading directories: [%bar%] %percent:3s%% %elapsed:6s%/%estimated:-6s%');
+            
+            $this->newLine();
+            $dirBar->start();
 
-            // Upload Config folder
-            $server->uploadDirectory(base_path('config') . '/', config('laravel-deployer.src_path') . '/config');
-            $this->info('Config folder uploaded successfully');
+            foreach ($directories as $directory) {
+                if (in_array(basename($directory), $excludedDirectories)) {
+                    continue;
+                }
 
-            // Upload Database folder
-            $server->uploadDirectory(base_path('database') . '/', config('laravel-deployer.src_path') . '/database');
-            $this->info('Database folder uploaded successfully');
+                $server->uploadDirectory(
+                    $directory, 
+                    config('laravel-deployer.src_path') . '/' . basename($directory),
+                    function($filename) {
+                        $this->line("   ↪ Uploading: " . basename($filename), null, OutputInterface::VERBOSITY_VERBOSE);
+                    }
+                );
+                
+                $dirBar->advance();
+            }
+            
+            $dirBar->finish();
+            $this->newLine(2);
 
-            // Run post deployment commands
+            // Upload root files
+            $defaultExcludedFiles = ['.env', '.env.example'];
+            $excludedFiles = $this->askWithCompletion(
+                '📄 Enter files to exclude (comma-separated)',
+                $defaultExcludedFiles
+            );
+            $excludedFiles = array_unique(array_merge(
+                array_map('trim', explode(',', $excludedFiles)),
+                $defaultExcludedFiles
+            ));
+
+            $this->info('🔒 Excluded files: ' . implode(', ', $excludedFiles));
+            $this->newLine();
+
+            $this->info('📄 Uploading root files...');
+            $rootFiles = array_filter(glob(base_path() . '/*'), 'is_file');
+            $fileBar = $this->output->createProgressBar(count($rootFiles));
+            $fileBar->setFormat(' [%bar%] %current%/%max% files');
+            
+            foreach ($rootFiles as $file) {
+                if (!in_array(basename($file), $excludedFiles)) {
+                    $server->upload($file, config('laravel-deployer.src_path') . '/' . basename($file));
+                    $fileBar->advance();
+                }
+            }
+            
+            $fileBar->finish();
+            $this->newLine(2);
+
+            // Upload public files
+            $this->info('🌐 Uploading public assets...');
+            $publicItems = glob(public_path() . '/*');
+            
+            foreach ($publicItems as $item) {
+
+                // Skip index.php file
+                if (basename($item) === 'index.php') {
+                    continue;
+                }
+                
+                $targetPath = config('laravel-deployer.public_path') . '/public/' . basename($item);
+                $targetPath2 = config('laravel-deployer.public_path') . '/' . basename($item);
+                
+                if (is_dir($item)) {
+                    $server->uploadDirectory($item, $targetPath, function($filename) {
+                        $this->line("   ✓ public/" . basename($item) . '/' . basename($filename));
+                    });
+
+                    // upload to public_html folder
+                    $server->uploadDirectory($item, $targetPath2, function($filename) {
+                        $this->line("   ✓ public/" . basename($item) . '/' . basename($filename));
+                    });
+                } else {
+                    $server->upload($item, $targetPath);
+
+                    // upload to public_html folder
+                    $server->upload($item, $targetPath2);
+
+                    $this->line("   ✓ public/" . basename($item));
+                }
+            }
+
+            $this->newLine();
+            $this->info('🔄 Running post-deployment tasks...');
             $this->runPostDeploymentCommands();
 
+            $server->disconnect();
+            $this->newLine();
+            $this->info('✨ Deployment completed successfully!');
+
         } catch (Exception $ex) {
-            $this->error($ex->getMessage());
-            return;
+            $this->error('❌ Deployment failed: ' . $ex->getMessage());
+            return 1;
         }
 
-        $server->disconnect();
-        $this->info('Application deployed successfully');
+        return 0;
     }
 
     /**
@@ -65,28 +157,27 @@ class DeployCommand extends Command
 
     /**
      * Run post deployment commands
+     * @return void
      */
     private function runPostDeploymentCommands()
     {
-        $response = '';
         $this->info('Running post deployment commands...');
 
         $server = $this->connectToServer();
 
-        // Debug this issue
-        // $server->execute('cd src && composer install --optimize-autloader --no-dev');
+        $commands = [
+            'cd src && php artisan cache:clear',
+            'cd src && php artisan config:clear',
+            'cd src && php artisan route:clear',
+            'cd src && php artisan view:clear',
+        ];
 
-        // Optimize route 
-        $server->execute('cd src && php artisan cache:clear');
-        $server->execute('cd src && php artisan config:clear');
-        
-        // Optimize route
-        $server->execute('cd src && php artisan route:clear');
-        $server->execute('cd src && php artisan view:clear');
+        foreach ($commands as $command) {
+            $server->execute($command);
+        }
 
         $this->info('Post deployment commands executed successfully');
 
-        // Discount
         $server->disconnect();
     }
 }
