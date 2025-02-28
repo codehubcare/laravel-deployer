@@ -108,6 +108,11 @@ class DeployCommand extends Command
                 
                 $targetPath = config('laravel-deployer.public_path') . '/' . basename($item);
                 $targetPath2 = config('laravel-deployer.public_path') . '/' . basename($item);
+
+                // Skip symlink
+                if (basename($item) === 'storage') {
+                    continue;
+                }
                 
                 if (is_dir($item)) {
                     $server->uploadDirectory($item, $targetPath, function($filename) {
