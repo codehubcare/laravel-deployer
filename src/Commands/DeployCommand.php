@@ -97,14 +97,35 @@ class DeployCommand extends Command
 
             // Upload public files
             $this->info('🌐 Uploading public assets...');
-            $publicFiles = array_filter(glob(public_path() . '/*'), function($file) {
-                return basename($file) !== 'index.php';
-            });
+            $publicItems = glob(public_path() . '/*');
             
-            foreach ($publicFiles as $file) {
-                $targetPath = config('laravel-deployer.public_path') . '/public/' . basename($file);
-                $server->upload($file, $targetPath);
-                $this->line("   ✓ " . basename($file));
+            foreach ($publicItems as $item) {
+
+                // Skip index.php file
+                if (basename($item) === 'index.php') {
+                    continue;
+                }
+                
+                $targetPath = config('laravel-deployer.public_path') . '/public/' . basename($item);
+                $targetPath2 = config('laravel-deployer.public_path') . '/' . basename($item);
+                
+                if (is_dir($item)) {
+                    $server->uploadDirectory($item, $targetPath, function($filename) {
+                        $this->line("   ✓ public/" . basename($item) . '/' . basename($filename));
+                    });
+
+                    // upload to public_html folder
+                    $server->uploadDirectory($item, $targetPath2, function($filename) {
+                        $this->line("   ✓ public/" . basename($item) . '/' . basename($filename));
+                    });
+                } else {
+                    $server->upload($item, $targetPath);
+
+                    // upload to public_html folder
+                    $server->upload($item, $targetPath2);
+
+                    $this->line("   ✓ public/" . basename($item));
+                }
             }
 
             $this->newLine();
