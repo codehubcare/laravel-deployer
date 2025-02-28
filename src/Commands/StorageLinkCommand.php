@@ -29,16 +29,16 @@ class StorageLinkCommand extends Command
         $link = config('laravel-deployer.public_path') . '/storage';
 
         try {
-            $result = $ssh->execute("ln -s $target $link");
+            $result = $ssh->execute("ln -s $target $link 2>&1");
             
-            if ($result['success']) {
+            if (empty($result)) {
                 $this->output->writeln(' <fg=green>✓</>');
                 $this->line("\n<fg=green>✨ Successfully created storage link:</>");
                 $this->line("   $link → $target\n");
             } else {
                 $this->output->writeln(' <fg=red>✗</>');
                 $this->error('Failed to create symbolic link:');
-                $this->line('   ' . $result['error']);
+                $this->line('   ' . $result);
             }
         } catch (\Exception $e) {
             $this->output->writeln(' <fg=red>✗</>');
