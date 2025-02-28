@@ -30,10 +30,10 @@ class SshDetails extends Command
         $this->newLine();
         $this->info('SSH Connection Details');
         $this->line('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        $this->line('   Host     : ' . config('laravel-deployer.ssh.host'));
-        $this->line('   Username : ' . config('laravel-deployer.ssh.username'));
-        $this->line('   Command  : ssh ' . config('laravel-deployer.ssh.username') . '@' . config('laravel-deployer.ssh.host'));
-        $this->line('   Password : ' . config('laravel-deployer.ssh.password'));
+        $this->line('   Host     : ' . config('laravel-deployer.ftp.host'));
+        $this->line('   Username : ' . config('laravel-deployer.ftp.username'));
+        $this->line('   Command  : ssh ' . config('laravel-deployer.ftp.username') . '@' . config('laravel-deployer.ftp.host'));
+        $this->line('   Password : ' . config('laravel-deployer.ftp.password'));
         $this->line('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         $this->comment('   Tip: Use this connection to run additional commands if needed.');
 
