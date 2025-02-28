@@ -115,17 +115,6 @@ class DeployCommand extends Command
             $this->newLine();
             $this->info('✨ Deployment completed successfully!');
 
-            // Provider user ssh connection details including credentials so that they can run additional commands
-            $this->newLine();
-            $this->info('🔑 SSH Connection Details');
-            $this->line('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-            $this->line('   Host     : ' . config('laravel-deployer.ftp.host'));
-            $this->line('   Username : ' . config('laravel-deployer.ftp.username'));
-            $this->line('   Command  : ssh ' . config('laravel-deployer.ftp.username') . '@' . config('laravel-deployer.ftp.host'));
-            $this->line('   Password : ' . config('laravel-deployer.ftp.password'));
-            $this->line('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-            $this->comment('   Tip: Use this connection to run additional commands if needed.');
-
         } catch (Exception $ex) {
             $this->error('❌ Deployment failed: ' . $ex->getMessage());
             return 1;
