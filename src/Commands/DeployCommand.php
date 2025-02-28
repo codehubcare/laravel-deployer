@@ -29,9 +29,12 @@ class DeployCommand extends Command
             $excludedDirectories = explode(',', $excludedDirectories);
             $excludedDirectories = array_map('trim', $excludedDirectories);
             $excludedDirectories = array_merge($excludedDirectories, ['vendor', 'node_modules', 'storage']);
+            $excludedDirectories = array_unique($excludedDirectories);
 
             // display excluded directories
             $this->info('Excluded directories: ' . implode(', ', $excludedDirectories));
+
+            $this->info('---------------------------------');
 
 
             // Upload all directories from the Laravel root path to the remote server (excluding specified directories)
