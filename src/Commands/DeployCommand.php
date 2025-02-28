@@ -21,8 +21,18 @@ class DeployCommand extends Command
             // Connect remote server
             $server = $this->connectToServer();
 
-            // Excluded directories
-            $excludedDirectories = ['vendor', 'node_modules', 'storage'];
+            // Log user about uploading directories
+            $this->info('Uploading directories...');
+
+            // Get user  input for directories to exclude and then merge it to the default excluded directories
+            $excludedDirectories = $this->ask('Enter directories to exclude separated by comma (vendor, node_modules, storage)');
+            $excludedDirectories = explode(',', $excludedDirectories);
+            $excludedDirectories = array_map('trim', $excludedDirectories);
+            $excludedDirectories = array_merge($excludedDirectories, ['vendor', 'node_modules', 'storage']);
+
+            // display excluded directories
+            $this->info('Excluded directories: ' . implode(', ', $excludedDirectories));
+
 
             // Upload all directories from the Laravel root path to the remote server (excluding specified directories)
             $directories = glob(base_path() . '/*', GLOB_ONLYDIR);
@@ -51,8 +61,11 @@ class DeployCommand extends Command
                 if (is_dir($file)) {
                     continue;
                 }
+
+                $this->info('Uploading ' . basename($file) . '...');
+
                 $server->upload($file, config('laravel-deployer.src_path') . '/' . basename($file));
-                $this->info(basename($file) . 'uploaded successfully');
+                $this->info(basename($file) . ' uploaded successfully');
             }
 
 
@@ -64,6 +77,8 @@ class DeployCommand extends Command
                 if (basename($file) == 'index.php') {
                     continue;
                 }
+
+                $this->info('Uploading ' . basename($file) . '...');
                 $server->upload($file, config('laravel-deployer.public_path') . '/public/' . basename($file));
                 $this->info(basename($file) . 'uploaded successfully');
             }
