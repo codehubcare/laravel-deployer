@@ -33,6 +33,8 @@ class DeployCommand extends Command
                     continue;
                 }
 
+                $this->info('Uploading ' . basename($directory) . '...');
+
                 $server->uploadDirectory($directory, config('laravel-deployer.src_path') . '/' . basename($directory));
                 $this->info(basename($directory) . ' uploaded successfully');
             }
