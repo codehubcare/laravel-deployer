@@ -21,29 +21,51 @@ class DeployCommand extends Command
             // Connect remote server
             $server = $this->connectToServer();
 
-            // Upload App folder
-            $server->uploadDirectory(base_path('app') . '/', config('laravel-deployer.src_path') . '/app');
-            $this->info('App folder uploaded successfully');
+            // Excluded directories
+            $excludedDirectories = ['vendor', 'node_modules', 'storage'];
 
-            // Upload Resources folder
-            $server->uploadDirectory(resource_path(), config('laravel-deployer.src_path') . '/resources');
-            $this->info('Resources folder uploaded successfully');
+            // Upload all directories from the Laravel root path to the remote server (excluding specified directories)
+            $directories = glob(base_path() . '/*', GLOB_ONLYDIR);
+            foreach ($directories as $directory) {
 
-            // Upload Routes folder
-            $server->uploadDirectory(base_path('routes') . '/', config('laravel-deployer.src_path') . '/routes');
-            $this->info('Routes folder uploaded successfully');
+                // Skip excluded directories
+                if(in_array(basename($directory), $excludedDirectories)) {
+                    continue;
+                }
 
-            // Upload Config folder
-            $server->uploadDirectory(base_path('config') . '/', config('laravel-deployer.src_path') . '/config');
-            $this->info('Config folder uploaded successfully');
+                $server->uploadDirectory($directory, config('laravel-deployer.src_path') . '/' . basename($directory));
+                $this->info(basename($directory) . ' uploaded successfully');
+            }
 
-            // Upload Database folder
-            $server->uploadDirectory(base_path('database') . '/', config('laravel-deployer.src_path') . '/database');
-            $this->info('Database folder uploaded successfully');
+            // Upload all files from the Laravel root path to the remote server except .env file
+            $files = glob(base_path() . '/*');
+            foreach ($files as $file) {
 
-            // Upload Public folder
-            $server->uploadDirectory(base_path('public') . '/', config('laravel-deployer.src_path') . '/public');
-            $this->info('Public folder uploaded successfully');
+                // Skip .env file
+                if (basename($file) == '.env') {
+                    continue;
+                }
+
+                if (is_dir($file)) {
+                    continue;
+                }
+                $server->upload($file, config('laravel-deployer.src_path') . '/' . basename($file));
+                $this->info(basename($file) . 'uploaded successfully');
+            }
+
+
+            // Upload all files and directors of the public directory to the remote server except index.php file
+            $publicFiles = glob(public_path() . '/*');
+            foreach ($publicFiles as $file) {
+
+                // Skip index.php file
+                if (basename($file) == 'index.php') {
+                    continue;
+                }
+                $server->upload($file, config('laravel-deployer.public_path') . '/public/' . basename($file));
+                $this->info(basename($file) . 'uploaded successfully');
+            }
+
 
             // Run post deployment commands
             $this->runPostDeploymentCommands();
