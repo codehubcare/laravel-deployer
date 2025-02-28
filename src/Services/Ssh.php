@@ -93,44 +93,64 @@ class Ssh
      * @param string $destination The remote directory path to upload to.
      * @return void
      */
-    public function uploadDirectory($directory, $destination)
+    public function uploadDirectory($directory, $destination, $skipExisting = false)
     {
         if (!$this->sftp) {
             throw new \Exception('Not connected');
         }
-                
+        
         // Ensure trailing slash consistency
         $directory = rtrim($directory, '/');
         $destination = rtrim($destination, '/');
         
-        // Verify and create destination directory
+        // Verify source directory exists
+        if (!is_dir($directory)) {
+            throw new \Exception("Source directory does not exist: $directory");
+        }
+
+        // Create destination directory if it doesn't exist
         if (!$this->sftp->is_dir($destination)) {
             if (!$this->sftp->mkdir($destination, 0777, true)) {
-                throw new \Exception("Failed to create directory: $destination");
+                throw new \Exception("Failed to create remote directory: $destination");
             }
         }
 
-        $items = scandir($directory);
-        if ($items === false) {
-            throw new \Exception("Failed to read directory: $directory");
-        }
+        try {
+            $iterator = new \RecursiveIteratorIterator(
+                new \RecursiveDirectoryIterator($directory, \RecursiveDirectoryIterator::SKIP_DOTS),
+                \RecursiveIteratorIterator::SELF_FIRST
+            );
 
-        foreach ($items as $item) {
-            if ($item === '.' || $item === '..') {
-                continue;
+            foreach ($iterator as $item) {
+                $localPath = $item->getPathname();
+                $relativePath = substr($localPath, strlen($directory) + 1);
+                $remotePath = $destination . '/' . $relativePath;
+
+                if ($item->isDir()) {
+                    if (!$this->sftp->is_dir($remotePath)) {
+                        $this->sftp->mkdir($remotePath, 0777, true);
+                    }
+                } else {
+                    // Skip existing files if requested
+                    if ($skipExisting && $this->sftp->file_exists($remotePath)) {
+                        continue;
+                    }
+
+                    // Upload file with error handling
+                    $result = $this->sftp->put($remotePath, $localPath, SFTP::SOURCE_LOCAL_FILE);
+                    if ($result === false) {
+                        throw new \Exception("Failed to upload file: $localPath");
+                    }
+
+                    // Free up memory
+                    clearstatcache(true, $localPath);
+                }
             }
 
-            $localPath = $directory . '/' . $item;
-            $remotePath = $destination . '/' . $item;
-
-            if (is_dir($localPath)) {
-                $this->uploadDirectory($localPath, $remotePath);
-            } else {
-                $this->sftp->put($remotePath, $localPath, SFTP::SOURCE_LOCAL_FILE);
-            }
+            return true;
+        } catch (\Exception $e) {
+            throw new \Exception('Upload failed: ' . $e->getMessage());
         }
-
-        return true;
     }
 
     /**

@@ -15,88 +15,123 @@ class DeployCommand extends Command
 
     public function handle()
     {
-        $this->info('Deploying the application...');
+        $this->info('🚀 Starting deployment process...');
 
         try {
             // Connect remote server
+            $this->info('📡 Connecting to remote server...');
             $server = $this->connectToServer();
+            $this->info('✅ Connected successfully');
 
-            // Log user about uploading directories
-            $this->info('Uploading directories...');
+            // Get excluded directories
+            $defaultExcludes = ['vendor', 'node_modules', 'storage'];
+            $excludedDirectories = $this->askWithCompletion(
+                '📂 Enter directories to exclude (comma-separated)',
+                $defaultExcludes
+            );
+            $excludedDirectories = array_unique(array_merge(
+                array_map('trim', explode(',', $excludedDirectories)),
+                $defaultExcludes
+            ));
 
-            // Get user  input for directories to exclude and then merge it to the default excluded directories
-            $excludedDirectories = $this->ask('Enter directories to exclude separated by comma (vendor, node_modules, storage)');
-            $excludedDirectories = explode(',', $excludedDirectories);
-            $excludedDirectories = array_map('trim', $excludedDirectories);
-            $excludedDirectories = array_merge($excludedDirectories, ['vendor', 'node_modules', 'storage']);
-            $excludedDirectories = array_unique($excludedDirectories);
+            $this->info('🔒 Excluded directories: ' . implode(', ', $excludedDirectories));
+            $this->newLine();
 
-            // display excluded directories
-            $this->info('Excluded directories: ' . implode(', ', $excludedDirectories));
-
-            $this->info('---------------------------------');
-
-
-            // Upload all directories from the Laravel root path to the remote server (excluding specified directories)
+            // Upload directories
             $directories = glob(base_path() . '/*', GLOB_ONLYDIR);
+            $dirCount = count(array_filter($directories, fn($dir) => !in_array(basename($dir), $excludedDirectories)));
+            
+            $dirBar = $this->output->createProgressBar($dirCount);
+            $dirBar->setFormat('📤 Uploading directories: [%bar%] %percent:3s%% %elapsed:6s%/%estimated:-6s%');
+            
+            $this->newLine();
+            $dirBar->start();
+
             foreach ($directories as $directory) {
-
-                // Skip excluded directories
-                if(in_array(basename($directory), $excludedDirectories)) {
+                if (in_array(basename($directory), $excludedDirectories)) {
                     continue;
                 }
 
-                $this->info('Uploading ' . basename($directory) . '...');
-
-                $server->uploadDirectory($directory, config('laravel-deployer.src_path') . '/' . basename($directory));
-                $this->info(basename($directory) . ' uploaded successfully to: ' . config('laravel-deployer.src_path') . '/' . basename($directory));
+                $server->uploadDirectory(
+                    $directory, 
+                    config('laravel-deployer.src_path') . '/' . basename($directory),
+                    function($filename) {
+                        $this->line("   ↪ Uploading: " . basename($filename), null, OutputInterface::VERBOSITY_VERBOSE);
+                    }
+                );
+                
+                $dirBar->advance();
             }
+            
+            $dirBar->finish();
+            $this->newLine(2);
 
-            // Upload all files from the Laravel root path to the remote server except .env file
-            $files = glob(base_path() . '/*');
-            foreach ($files as $file) {
+            // Upload root files
+            $defaultExcludedFiles = ['.env', '.env.example'];
+            $excludedFiles = $this->askWithCompletion(
+                '📄 Enter files to exclude (comma-separated)',
+                $defaultExcludedFiles
+            );
+            $excludedFiles = array_unique(array_merge(
+                array_map('trim', explode(',', $excludedFiles)),
+                $defaultExcludedFiles
+            ));
 
-                // Skip .env file
-                if (basename($file) == '.env') {
-                    continue;
+            $this->info('🔒 Excluded files: ' . implode(', ', $excludedFiles));
+            $this->newLine();
+
+            $this->info('📄 Uploading root files...');
+            $rootFiles = array_filter(glob(base_path() . '/*'), 'is_file');
+            $fileBar = $this->output->createProgressBar(count($rootFiles));
+            $fileBar->setFormat(' [%bar%] %current%/%max% files');
+            
+            foreach ($rootFiles as $file) {
+                if (!in_array(basename($file), $excludedFiles)) {
+                    $server->upload($file, config('laravel-deployer.src_path') . '/' . basename($file));
+                    $fileBar->advance();
                 }
-
-                if (is_dir($file)) {
-                    continue;
-                }
-
-                $this->info('Uploading ' . basename($file) . '...');
-
-                $server->upload($file, config('laravel-deployer.src_path') . '/' . basename($file));
-                $this->info(basename($file) . ' uploaded successfully to: ' . config('laravel-deployer.src_path') . '/' . basename($file));
             }
+            
+            $fileBar->finish();
+            $this->newLine(2);
 
-
-            // Upload all files and directors of the public directory to the remote server except index.php file
-            $publicFiles = glob(public_path() . '/*');
+            // Upload public files
+            $this->info('🌐 Uploading public assets...');
+            $publicFiles = array_filter(glob(public_path() . '/*'), function($file) {
+                return basename($file) !== 'index.php';
+            });
+            
             foreach ($publicFiles as $file) {
-
-                // Skip index.php file
-                if (basename($file) == 'index.php') {
-                    continue;
-                }
-
-                $this->info('Uploading ' . basename($file) . '...');
-                $server->upload($file, config('laravel-deployer.public_path') . '/public/' . basename($file));
-                $this->info(basename($file) . 'uploaded successfully to: ' . config('laravel-deployer.public_path') . '/public/' . basename($file));
+                $targetPath = config('laravel-deployer.public_path') . '/public/' . basename($file);
+                $server->upload($file, $targetPath);
+                $this->line("   ✓ " . basename($file));
             }
 
-
-            // Run post deployment commands
+            $this->newLine();
+            $this->info('🔄 Running post-deployment tasks...');
             $this->runPostDeploymentCommands();
 
+            $server->disconnect();
+            $this->newLine();
+            $this->info('✨ Deployment completed successfully!');
+
+            // Provider user ssh connection details including credentials so that they can run additional commands
+            $this->newLine();
+            $this->info('🔑 SSH Connection Details');
+            $this->line('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+            $this->line('   Host     : ' . config('laravel-deployer.ftp.host'));
+            $this->line('   Username : ' . config('laravel-deployer.ftp.username'));
+            $this->line('   Command  : ssh ' . config('laravel-deployer.ftp.username') . '@' . config('laravel-deployer.ftp.host'));
+            $this->line('   Password : ' . config('laravel-deployer.ftp.password'));
+            $this->line('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+            $this->comment('   Tip: Use this connection to run additional commands if needed.');
+
         } catch (Exception $ex) {
-            $this->error($ex->getMessage());
-            return;
+            $this->error('❌ Deployment failed: ' . $ex->getMessage());
+            return 1;
         }
 
-        $server->disconnect();
-        $this->info('Application deployed successfully');
+        return 0;
     }
 
     /**
