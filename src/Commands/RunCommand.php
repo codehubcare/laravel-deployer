@@ -16,36 +16,50 @@ class RunCommand extends Command
     public function handle()
     {
         try {
-
             $this->info('🚀 Starting deployment process...');
 
             // list changed files
             $changedFiles = [];
             exec('git diff --name-only HEAD origin/main | sort | uniq', $changedFiles);
 
+            if (empty($changedFiles)) {
+                $this->info('📝 No changes detected to deploy.');
+                return 0;
+            }
+
+            // Your current branch
+            $this->info('📂 Current branch: ' . exec('git branch --show-current'));
+            $this->newLine();
+            
+            // Remote Branch
+            $this->info('📂 Remote branch: ' . exec('git rev-parse --abbrev-ref origin/main'));
+            $this->newLine();
+
             $changedFiles = collect($changedFiles)->map(function ($file) {
                 return trim($file);
             });
 
+            $this->info('📋 Changed files:');
             $changedFiles->each(function ($file) {
-                $this->info('📂 ' . $file);
+                $this->info('  ├─ ' . $file);
             });
-
-
             $this->newLine();
+
+            if (!$this->confirm('Do you wish to continue with the deployment?', true)) {
+                $this->info('💡 Deployment cancelled by user.');
+                return 0;
+            }
 
             // Upload changed files to server
             $this->info('📡 Connecting to remote server...');
             $server = $this->connectToServer();
             $this->info('✅ Connected successfully');
-
             $this->newLine();
 
             $this->info('📤 Uploading changed files to server...');
-
             $changedFiles->each(function ($file) use ($server) {
                 $server->upload($file, config('laravel-deployer.src_path') . '/' . $file);
-                $this->info('✓ ' . $file);
+                $this->info('  ✓ ' . $file);
             });
 
             $this->newLine();
