@@ -9,12 +9,14 @@ use Exception;
 class DeployCommand extends Command
 {
     
+    
     protected $signature = 'laravel-deployer:deploy';
 
     protected $description = 'Deploy the application';
 
     public function handle()
     {
+
         $this->info('🚀 Starting deployment process...');
 
         try {

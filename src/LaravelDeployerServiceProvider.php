@@ -3,6 +3,7 @@
 namespace Codehubcare\LaravelDeployer;
 
 use Codehubcare\LaravelDeployer\Commands\DeployCommand;
+use Codehubcare\LaravelDeployer\Commands\RunCommand;
 use Codehubcare\LaravelDeployer\Commands\SshDetailsCommand;
 use Codehubcare\LaravelDeployer\Commands\StorageLinkCommand;
 use Illuminate\Support\ServiceProvider;
@@ -26,19 +27,11 @@ class LaravelDeployerServiceProvider extends ServiceProvider
      */
     public function boot()
     {
-        // Load routes, views, migrations, and config
+        // Load routes and config 
         $this->loadRoutesFrom(__DIR__ . '/routes/web.php');
-        $this->loadViewsFrom(__DIR__ . '/resources/views', 'laravel-deployer');
         $this->mergeConfigFrom(__DIR__ . '/config/laravel-deployer.php', 'laravel-deployer');
 
-        // Optionally publish views and config
-        $this->publishes(
-            [
-                __DIR__ . '/resources/views' => resource_path('views/vendor/laravel-deployer'),
-            ],
-            'laravel-deployer-views',
-        );
-
+        // Optionally publish the config file
         $this->publishes(
             [
                 __DIR__ . '/config/laravel-deployer.php' => config_path('laravel-deployer.php'),
@@ -49,6 +42,7 @@ class LaravelDeployerServiceProvider extends ServiceProvider
         // Register the artisan commands
         if ($this->app->runningInConsole()) {
             $this->commands([
+                RunCommand::class,
                 DeployCommand::class,
                 SshDetailsCommand::class,
                 StorageLinkCommand::class,
