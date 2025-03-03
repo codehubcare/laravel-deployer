@@ -20,7 +20,12 @@ class RunCommand extends Command
 
             // list changed files
             $changedFiles = [];
-            exec('git diff --name-only HEAD origin/main | sort | uniq', $changedFiles);
+            // Fetch latest changes from remote
+            exec('git fetch origin main');
+            // Get the merge-base (common ancestor) between current branch and origin/main
+            $mergeBase = trim(exec('git merge-base HEAD origin/main'));
+            // Get changed files using diff between merge-base and HEAD
+            exec("git diff --name-only {$mergeBase} HEAD | sort | uniq", $changedFiles);
 
             if (empty($changedFiles)) {
                 $this->info('📝 No changes detected to deploy.');
@@ -29,8 +34,7 @@ class RunCommand extends Command
 
             // Your current branch
             $this->info('📂 Current branch: ' . exec('git branch --show-current'));
-            $this->newLine();
-            
+
             // Remote Branch
             $this->info('📂 Remote branch: ' . exec('git rev-parse --abbrev-ref origin/main'));
             $this->newLine();
