@@ -83,6 +83,12 @@ class Ssh
         if (!$this->sftp) {
             throw new \Exception('Not connected');
         }
+
+        // check if file doesn't exists
+        if (!is_file($file)) {
+            return;
+        }
+
         return $this->sftp->put($destination, $file, SFTP::SOURCE_LOCAL_FILE);
     }
 
